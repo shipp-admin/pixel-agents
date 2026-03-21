@@ -104,6 +104,8 @@ export interface FurnitureCatalogEntry {
   sprite: SpriteData;
   isDesk: boolean;
   category?: string;
+  /** Group ID from the furniture catalog (rotation/state groups, break spots, etc.) */
+  groupId?: string;
   /** Orientation from rotation group: 'front' | 'back' | 'left' | 'right' */
   orientation?: string;
   /** Whether this item can be placed on top of desk/table surfaces */
@@ -198,4 +200,20 @@ export interface Character {
   activityText: string | null;
   /** Countdown in seconds until activity text auto-hides */
   activityTextTimer: number;
+  /** Current idle chatter text to show in speech bubble (null = none) */
+  chatterText: string | null;
+  /** Timer controlling chatter: counts down to 0 to fire/clear chatter phrase */
+  chatterTimer: number;
+  /** Whether the character is currently in the permission-waiting "looking busy" state */
+  isPermissionWaiting: boolean;
+  /** Countdown until next looking-busy thought bubble fires (seconds) */
+  lookingBusyPhraseTimer: number;
+  /** Countdown until next side-glance (seconds) */
+  lookingBusyGlanceTimer: number;
+  /** Countdown until facing direction is restored after a glance (seconds) */
+  lookingBusyGlanceRestoreTimer: number;
+  /** Greeting to show after spawn effect completes (null = none) */
+  pendingSpawnGreeting: string | null;
+  /** Countdown in seconds while agent is on a break at a break spot (0 = not on break) */
+  breakTimer: number;
 }

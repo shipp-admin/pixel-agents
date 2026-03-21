@@ -9,6 +9,8 @@ import {
   BUTTON_RADIUS_ZOOM_FACTOR,
   CHARACTER_SITTING_OFFSET_PX,
   CHARACTER_Z_SORT_OFFSET,
+  CHATTER_BUBBLE_BG,
+  CHATTER_BUBBLE_BORDER,
   DELETE_BUTTON_BG,
   FALLBACK_FLOOR_COLOR,
   GHOST_BORDER_HOVER_FILL,
@@ -607,6 +609,50 @@ export function renderEmoteBubbles(
       for (let i = 0; i < lines.length; i++) {
         ctx.fillText(lines[i], bx + THOUGHT_PADDING, by + THOUGHT_PADDING + i * THOUGHT_LINE_H);
       }
+    } else if (ch.chatterText) {
+      ctx.font = `${TEXT_FONT_SIZE}px monospace`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+
+      // Word-wrap the chatter text
+      const words = ch.chatterText.split(' ');
+      const lines: string[] = [];
+      let currentLine = '';
+      const innerW = THOUGHT_MAX_W - THOUGHT_PADDING * 2;
+      for (const word of words) {
+        const test = currentLine ? `${currentLine} ${word}` : word;
+        if (ctx.measureText(test).width <= innerW) {
+          currentLine = test;
+        } else {
+          if (currentLine) lines.push(currentLine);
+          currentLine = word;
+        }
+      }
+      if (currentLine) lines.push(currentLine);
+
+      const bubbleH = lines.length * THOUGHT_LINE_H + THOUGHT_PADDING * 2;
+      const bubbleW = Math.min(
+        THOUGHT_MAX_W,
+        Math.max(...lines.map((l) => ctx.measureText(l).width)) + THOUGHT_PADDING * 2,
+      );
+      const bx = Math.round(cx - bubbleW / 2);
+      const by = Math.round(emoteBoxBottom - bubbleH);
+
+      // Background (warmer tone for idle chatter)
+      ctx.fillStyle = CHATTER_BUBBLE_BG;
+      ctx.fillRect(bx, by, bubbleW, bubbleH);
+      // Top border accent (1px, pixel art)
+      ctx.fillStyle = CHATTER_BUBBLE_BORDER;
+      ctx.fillRect(bx, by, bubbleW, 1);
+
+      // Text lines
+      ctx.fillStyle = '#c8c8e8';
+      ctx.font = `${TEXT_FONT_SIZE}px monospace`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], bx + THOUGHT_PADDING, by + THOUGHT_PADDING + i * THOUGHT_LINE_H);
+      }
     }
   }
   ctx.restore();
@@ -657,6 +703,20 @@ export interface SelectionRenderState {
   characters: Map<number, Character>;
 }
 
+export interface AmbientRenderState {
+  opacity: number;
+  color: string;
+}
+
+function renderTimeOverlay(ctx: CanvasRenderingContext2D, ambient: AmbientRenderState): void {
+  if (ambient.opacity <= 0.001) return;
+  ctx.save();
+  ctx.globalAlpha = ambient.opacity;
+  ctx.fillStyle = ambient.color;
+  ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.restore();
+}
+
 export function renderFrame(
   ctx: CanvasRenderingContext2D,
   canvasWidth: number,
@@ -672,6 +732,7 @@ export function renderFrame(
   tileColors?: Array<FloorColor | null>,
   layoutCols?: number,
   layoutRows?: number,
+  ambient?: AmbientRenderState,
 ): { offsetX: number; offsetY: number } {
   // Clear
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -785,6 +846,11 @@ export function renderFrame(
       editor.deleteButtonBounds = null;
       editor.rotateButtonBounds = null;
     }
+  }
+
+  // Time-of-day ambient tint overlay (drawn last, on top of everything)
+  if (ambient) {
+    renderTimeOverlay(ctx, ambient);
   }
 
   return { offsetX, offsetY };

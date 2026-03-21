@@ -4,6 +4,12 @@ import type { FeedEntry } from '../components/ActivityFeed.js';
 import { MAX_FEED_ENTRIES } from '../constants.js';
 import { playDoneSound, setSoundEnabled } from '../notificationSound.js';
 import type { OfficeState } from '../office/engine/officeState.js';
+import {
+  triggerCloseReactions,
+  triggerCompletionReactions,
+  triggerPermissionReactions,
+  triggerSpawnReactions,
+} from '../office/engine/reactionSystem.js';
 import { getFlavorText } from '../office/flavorText.js';
 import { setFloorSprites } from '../office/floorTiles.js';
 import { buildDynamicCatalog } from '../office/layout/furnitureCatalog.js';
@@ -111,6 +117,7 @@ export function useExtensionMessages(
 
   // Track whether initial layout has been loaded (ref to avoid re-render)
   const layoutReadyRef = useRef(false);
+  const toolsUsedThisTurnRef = useRef<Record<number, number>>({});
 
   useEffect(() => {
     // Buffer agents from existingAgents until layout is loaded
@@ -144,6 +151,10 @@ export function useExtensionMessages(
         // Add buffered agents now that layout (and seats) are correct
         for (const p of pendingAgents) {
           os.addAgent(p.id, p.palette, p.hueShift, p.seatId, true, p.folderName);
+          // Bootstrapped agents: assume idle (relay doesn't re-emit status on reconnect).
+          // If a tool fires, setAgentActive(true) will override this.
+          os.setAgentActive(p.id, false);
+          os.startIdleChatter(p.id);
         }
         pendingAgents = [];
         layoutReadyRef.current = true;
@@ -164,6 +175,7 @@ export function useExtensionMessages(
           pendingAgents.push({ id, folderName });
         } else {
           os.addAgent(id, undefined, undefined, undefined, undefined, folderName);
+          triggerSpawnReactions(os.characters, os, id);
           saveAgentSeats(os);
         }
       } else if (msg.type === 'agentCreatedAsSubagent') {
@@ -210,6 +222,8 @@ export function useExtensionMessages(
         // Remove all sub-agent characters belonging to this agent
         os.removeAllSubagents(id);
         setSubagentCharacters((prev) => prev.filter((s) => s.parentAgentId !== id));
+        triggerCloseReactions(os.characters, os, id);
+        delete toolsUsedThisTurnRef.current[id];
         os.removeAgent(id);
       } else if (msg.type === 'existingAgents') {
         const incoming = msg.agents as number[];
@@ -257,6 +271,7 @@ export function useExtensionMessages(
         os.setEmote(id, emote);
         const toolNameForFlavor = toolName ?? '';
         os.setActivityText(id, getFlavorText(toolNameForFlavor, status));
+        toolsUsedThisTurnRef.current[id] = (toolsUsedThisTurnRef.current[id] ?? 0) + 1;
         // Feed entry
         const folderName = os.characters.get(id)?.folderName ?? 'agent';
         const feedEntry: FeedEntry = {
@@ -312,6 +327,9 @@ export function useExtensionMessages(
         // Remove all sub-agent characters belonging to this agent
         os.removeAllSubagents(id);
         setSubagentCharacters((prev) => prev.filter((s) => s.parentAgentId !== id));
+        const toolCount = toolsUsedThisTurnRef.current[id] ?? 0;
+        delete toolsUsedThisTurnRef.current[id];
+        triggerCompletionReactions(os.characters, os, id, toolCount);
         os.setAgentTool(id, null);
         os.clearPermissionBubble(id);
         os.clearEmoteAndActivity(id);
@@ -347,6 +365,7 @@ export function useExtensionMessages(
           };
         });
         os.showPermissionBubble(id);
+        triggerPermissionReactions(os.characters, os, id);
       } else if (msg.type === 'subagentToolPermission') {
         const id = msg.id as number;
         const parentToolId = msg.parentToolId as string;

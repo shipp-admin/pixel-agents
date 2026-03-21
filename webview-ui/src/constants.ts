@@ -120,3 +120,56 @@ export const CHARACTER_HIT_HALF_WIDTH = 8;
 export const CHARACTER_HIT_HEIGHT = 24;
 export const TOOL_OVERLAY_VERTICAL_OFFSET = 32;
 export const PULSE_ANIMATION_DURATION_SEC = 1.5;
+
+// ── Social Reactions ─────────────────────────────────────────────────────────
+export const REACTION_SPAWN_RADIUS_TILES = 5;
+export const REACTION_CLOSE_RADIUS_TILES = 5;
+export const REACTION_PERMISSION_RADIUS_TILES = 4;
+export const REACTION_EMOTE_DURATION_SEC = 2;
+export const REACTION_BUBBLE_DURATION_SEC = 2.5;
+export const REACTION_PERMISSION_DURATION_SEC = 3;
+export const REACTION_COMPLETION_TOOL_THRESHOLD = 3;
+export const REACTION_COMPLETION_EMOTE_DURATION_SEC = 2;
+
+// ── Looking Busy ─────────────────────────────────────────────────────────────
+export const LOOKING_BUSY_PHRASE_MIN_SEC = 8;
+export const LOOKING_BUSY_PHRASE_MAX_SEC = 15;
+export const LOOKING_BUSY_PHRASE_DISPLAY_SEC = 3;
+export const LOOKING_BUSY_GLANCE_MIN_SEC = 5;
+export const LOOKING_BUSY_GLANCE_MAX_SEC = 12;
+export const LOOKING_BUSY_GLANCE_DURATION_SEC = 1.5;
+
+// ── Time of Day Ambiance ─────────────────────────────────────────────────────
+export const TIME_SAMPLE_INTERVAL_SEC = 60; // how often to re-sample current time
+export const AMBIENT_TINT_LERP_SPEED = 2.0; // opacity lerp speed per second
+export const SPAWN_GREETING_DELAY_SEC = 1.5; // delay after spawn effect ends before showing greeting
+export const SPAWN_GREETING_DISPLAY_SEC = 4; // how long spawn greeting stays visible
+
+// ── Water Cooler / Break Spots ────────────────────────────────────────────────
+export const WATER_COOLER_VISIT_CHANCE = 0.15; // probability per wander decision
+export const WATER_COOLER_BREAK_MIN_SEC = 5; // min time at break spot
+export const WATER_COOLER_BREAK_MAX_SEC = 12; // max time at break spot
+export const WATER_COOLER_PHRASE_DISPLAY_SEC = 3.5; // how long phrase bubble stays
+export const WATER_COOLER_BREAK_SPOT_GROUPS = new Set([
+  'SOFA',
+  'CUSHIONED_BENCH',
+  'WOODEN_BENCH',
+  'COFFEE_TABLE',
+  'SMALL_TABLE',
+]);
+
+// ── Office Events ─────────────────────────────────────────────────────────────
+export const OFFICE_EVENT_INTERVAL_MIN_SEC = 30; // TEMP: 30s for testing (restore to 600)
+export const OFFICE_EVENT_INTERVAL_MAX_SEC = 60; // TEMP: 60s for testing (restore to 1200)
+export const OFFICE_EVENT_EMOTE_DURATION_SEC = 2.5;
+export const OFFICE_EVENT_PHRASE_DURATION_SEC = 4;
+
+// ── Idle Chatter ─────────────────────────────────────────────────────────────
+export const IDLE_CHATTER_FIRST_DELAY_MIN_SEC = 15;
+export const IDLE_CHATTER_FIRST_DELAY_MAX_SEC = 45;
+export const IDLE_CHATTER_INTERVAL_MIN_SEC = 30;
+export const IDLE_CHATTER_INTERVAL_MAX_SEC = 60;
+export const IDLE_CHATTER_DISPLAY_SEC = 5;
+// Chatter bubble colors (warmer than activityText thought bubble)
+export const CHATTER_BUBBLE_BG = 'rgba(22, 14, 10, 0.92)';
+export const CHATTER_BUBBLE_BORDER = '#5c4a3a';

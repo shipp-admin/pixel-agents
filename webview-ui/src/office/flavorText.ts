@@ -1,4 +1,5 @@
 import { FLAVOR_TEXT_MAX_LENGTH } from '../constants.js';
+import { type TimeWindow } from './engine/timeOfDay.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -186,4 +187,35 @@ export function getFlavorText(toolName: string, rawStatus: string): string {
   }
 
   return truncate(picked);
+}
+
+// ── Spawn Greetings (time-of-day aware) ──────────────────────────────────────
+
+const SPAWN_GREETINGS: Partial<Record<TimeWindow, readonly string[]>> = {
+  earlyMorning: ['Good morning 👋', 'Coffee first...', 'Early bird 🐦'],
+  morning: ['Morning!', 'Ready to ship', 'Good morning 👋'],
+  lunch: ['Lunch time?', 'Almost lunch...', 'Hungry already'],
+  lateAfternoon: ['Wrapping up soon', 'Almost end of day'],
+  evening: ['Still at it...', 'Evening grind 🌙'],
+  lateNight: ['Still going 🌙', 'Why are we still here...', 'Late night mode'],
+};
+
+const WEEKEND_SPAWN_GREETINGS: readonly string[] = [
+  "It's the weekend...",
+  'Weekend warrior',
+  'No rest for the wicked',
+  'Working on a Saturday?',
+];
+
+/**
+ * Returns a greeting phrase for when an agent spawns, based on the current time window.
+ * Returns null during neutral work hours (no greeting needed).
+ */
+export function getSpawnGreeting(window: TimeWindow, isWeekend: boolean): string | null {
+  if (isWeekend) {
+    return WEEKEND_SPAWN_GREETINGS[Math.floor(Math.random() * WEEKEND_SPAWN_GREETINGS.length)];
+  }
+  const phrases = SPAWN_GREETINGS[window];
+  if (!phrases || phrases.length === 0) return null;
+  return phrases[Math.floor(Math.random() * phrases.length)];
 }

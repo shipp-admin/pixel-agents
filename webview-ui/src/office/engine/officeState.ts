@@ -1,4 +1,5 @@
 import {
+  AMBIENT_TINT_LERP_SPEED,
   AUTO_ON_FACING_DEPTH,
   AUTO_ON_SIDE_DEPTH,
   CHARACTER_HIT_HALF_WIDTH,
@@ -8,11 +9,26 @@ import {
   FURNITURE_ANIM_INTERVAL_SEC,
   HUE_SHIFT_MIN_DEG,
   HUE_SHIFT_RANGE_DEG,
+  IDLE_CHATTER_FIRST_DELAY_MAX_SEC,
+  IDLE_CHATTER_FIRST_DELAY_MIN_SEC,
   INACTIVE_SEAT_TIMER_MIN_SEC,
   INACTIVE_SEAT_TIMER_RANGE_SEC,
+  LOOKING_BUSY_GLANCE_MAX_SEC,
+  LOOKING_BUSY_GLANCE_MIN_SEC,
+  LOOKING_BUSY_PHRASE_MAX_SEC,
+  LOOKING_BUSY_PHRASE_MIN_SEC,
+  OFFICE_EVENT_EMOTE_DURATION_SEC,
+  OFFICE_EVENT_INTERVAL_MAX_SEC,
+  OFFICE_EVENT_INTERVAL_MIN_SEC,
+  OFFICE_EVENT_PHRASE_DURATION_SEC,
   PALETTE_COUNT,
+  SPAWN_GREETING_DELAY_SEC,
+  SPAWN_GREETING_DISPLAY_SEC,
+  TIME_SAMPLE_INTERVAL_SEC,
   WAITING_BUBBLE_DURATION_SEC,
+  WATER_COOLER_BREAK_SPOT_GROUPS,
 } from '../../constants.js';
+import { getSpawnGreeting } from '../flavorText.js';
 import { getAnimationFrames, getCatalogEntry, getOnStateType } from '../layout/furnitureCatalog.js';
 import {
   createDefaultLayout,
@@ -22,6 +38,7 @@ import {
   layoutToTileMap,
 } from '../layout/layoutSerializer.js';
 import { findPath, getWalkableTiles, isWalkable } from '../layout/tileMap.js';
+import { pickOfficeEvent } from '../officeEvents.js';
 import type {
   Character,
   FurnitureInstance,
@@ -33,6 +50,7 @@ import type {
 import { CharacterState, Direction, MATRIX_EFFECT_DURATION, TILE_SIZE } from '../types.js';
 import { createCharacter, updateCharacter } from './characters.js';
 import { matrixEffectSeeds } from './matrixEffect.js';
+import { getTimeWindow, TimeWindow,TINT_TABLE } from './timeOfDay.js';
 
 export class OfficeState {
   layout: OfficeLayout;
@@ -53,6 +71,51 @@ export class OfficeState {
   /** Reverse lookup: sub-agent character ID → parent info */
   subagentMeta: Map<number, { parentAgentId: number; parentToolId: string }> = new Map();
   private nextSubagentId = -1;
+  private _breakSpotTiles: Set<string> = new Set();
+
+  // ── Time-of-Day Ambiance ─────────────────────────────────────────────────
+  private _currentTimeWindow: TimeWindow = TimeWindow.PeakWork;
+  private _isWeekend = false;
+  private _ambientTintOpacity = 0;
+  private _ambientTintTarget = 0;
+  private _ambientTintColor = '#000000';
+  private _timeSampleTimer = 0;
+  private _greetingShownThisSession = false;
+  private _eventTimer =
+    OFFICE_EVENT_INTERVAL_MIN_SEC +
+    Math.random() * (OFFICE_EVENT_INTERVAL_MAX_SEC - OFFICE_EVENT_INTERVAL_MIN_SEC);
+
+  get ambientTint(): { opacity: number; color: string } {
+    return { opacity: this._ambientTintOpacity, color: this._ambientTintColor };
+  }
+
+  get breakSpotTiles(): Set<string> {
+    return this._breakSpotTiles;
+  }
+
+  private rebuildBreakSpots(): void {
+    this._breakSpotTiles = new Set();
+    for (const item of this.layout.furniture) {
+      const entry = getCatalogEntry(item.type);
+      if (!entry || !WATER_COOLER_BREAK_SPOT_GROUPS.has(entry.groupId ?? '')) continue;
+      // Add walkable tiles adjacent to each furniture tile
+      for (let dr = 0; dr < entry.footprintH; dr++) {
+        for (let dc = 0; dc < entry.footprintW; dc++) {
+          const fc = item.col + dc;
+          const fr = item.row + dr;
+          // Add 4 adjacent tiles (if walkable — tileMap check happens in characters.ts)
+          for (const [nc, nr] of [
+            [fc - 1, fr],
+            [fc + 1, fr],
+            [fc, fr - 1],
+            [fc, fr + 1],
+          ] as const) {
+            this._breakSpotTiles.add(`${nc},${nr}`);
+          }
+        }
+      }
+    }
+  }
 
   constructor(layout?: OfficeLayout) {
     this.layout = layout || createDefaultLayout();
@@ -61,6 +124,7 @@ export class OfficeState {
     this.blockedTiles = getBlockedTiles(this.layout.furniture);
     this.furniture = layoutToFurnitureInstances(this.layout.furniture);
     this.walkableTiles = getWalkableTiles(this.tileMap, this.blockedTiles);
+    this.rebuildBreakSpots();
   }
 
   /** Rebuild all derived state from a new layout. Reassigns existing characters.
@@ -139,6 +203,7 @@ export class OfficeState {
         this.relocateCharacterToWalkable(ch);
       }
     }
+    this.rebuildBreakSpots();
   }
 
   /** Move a character to a random walkable tile */
@@ -308,6 +373,14 @@ export class OfficeState {
       ch.matrixEffectTimer = 0;
       ch.matrixEffectSeeds = matrixEffectSeeds();
     }
+
+    // Schedule spawn greeting based on current time window
+    const greeting = getSpawnGreeting(this._currentTimeWindow, this._isWeekend);
+    if (greeting && !this._greetingShownThisSession) {
+      this._greetingShownThisSession = true;
+      ch.pendingSpawnGreeting = greeting;
+    }
+
     this.characters.set(id, ch);
   }
 
@@ -567,6 +640,10 @@ export class OfficeState {
         ch.seatTimer = -1;
         ch.path = [];
         ch.moveProgress = 0;
+      } else {
+        ch.chatterText = null;
+        ch.chatterTimer = 0;
+        ch.breakTimer = 0;
       }
       this.rebuildFurnitureInstances();
     }
@@ -652,6 +729,15 @@ export class OfficeState {
     if (ch) {
       ch.bubbleType = 'permission';
       ch.bubbleTimer = 0;
+      ch.isPermissionWaiting = true;
+      ch.lookingBusyPhraseTimer =
+        LOOKING_BUSY_PHRASE_MIN_SEC +
+        Math.random() * (LOOKING_BUSY_PHRASE_MAX_SEC - LOOKING_BUSY_PHRASE_MIN_SEC);
+      ch.lookingBusyGlanceTimer =
+        LOOKING_BUSY_GLANCE_MIN_SEC +
+        Math.random() * (LOOKING_BUSY_GLANCE_MAX_SEC - LOOKING_BUSY_GLANCE_MIN_SEC);
+      ch.lookingBusyGlanceRestoreTimer = 0;
+      this.sendToSeat(id);
     }
   }
 
@@ -660,6 +746,15 @@ export class OfficeState {
     if (ch && ch.bubbleType === 'permission') {
       ch.bubbleType = null;
       ch.bubbleTimer = 0;
+      ch.isPermissionWaiting = false;
+      ch.lookingBusyGlanceRestoreTimer = 0;
+      ch.lookingBusyPhraseTimer = 0;
+      ch.lookingBusyGlanceTimer = 0;
+      ch.activityText = null;
+      ch.activityTextTimer = 0;
+      // Restore facing direction immediately (zero restore timer first so it can't overwrite)
+      const seat = this.seats.get(ch.seatId ?? '');
+      if (seat) ch.dir = seat.facingDir;
     }
   }
 
@@ -668,7 +763,17 @@ export class OfficeState {
     if (ch) {
       ch.bubbleType = 'waiting';
       ch.bubbleTimer = WAITING_BUBBLE_DURATION_SEC;
+      this.startIdleChatter(id);
     }
+  }
+
+  startIdleChatter(id: number): void {
+    const ch = this.characters.get(id);
+    if (!ch || ch.isSubagent) return;
+    ch.chatterText = null;
+    ch.chatterTimer =
+      IDLE_CHATTER_FIRST_DELAY_MIN_SEC +
+      Math.random() * (IDLE_CHATTER_FIRST_DELAY_MAX_SEC - IDLE_CHATTER_FIRST_DELAY_MIN_SEC);
   }
 
   /** Show an emote bubble above the character for the given duration (seconds) */
@@ -712,7 +817,50 @@ export class OfficeState {
     }
   }
 
+  private triggerOfficeEvent(): void {
+    const event = pickOfficeEvent();
+    for (const ch of this.characters.values()) {
+      if (ch.isActive || ch.isSubagent || ch.matrixEffect !== null) continue;
+      // All idle non-subagent characters get the emote
+      ch.emote = event.emote;
+      ch.emoteTimer = OFFICE_EVENT_EMOTE_DURATION_SEC;
+      // A random ~40% get the phrase too (avoids every character saying the same thing)
+      if (Math.random() < 0.4) {
+        ch.chatterText = event.phrases[Math.floor(Math.random() * event.phrases.length)];
+        ch.chatterTimer = OFFICE_EVENT_PHRASE_DURATION_SEC;
+      }
+    }
+  }
+
   update(dt: number): void {
+    // ── Time-of-Day sampling ─────────────────────────────────────────────────
+    if (this._timeSampleTimer === 0 || this._timeSampleTimer >= TIME_SAMPLE_INTERVAL_SEC) {
+      const { window, isWeekend } = getTimeWindow(new Date());
+      this._currentTimeWindow = window;
+      this._isWeekend = isWeekend;
+      const tintKey: TimeWindow = isWeekend ? TimeWindow.Weekend : window;
+      const tint = TINT_TABLE[tintKey];
+      this._ambientTintTarget = tint.peakOpacity;
+      this._ambientTintColor = tint.color;
+      this._timeSampleTimer = dt; // start counting up from dt so we don't re-trigger next frame
+    } else {
+      this._timeSampleTimer += dt;
+    }
+
+    // ── Office Events ─────────────────────────────────────────────────────────
+    this._eventTimer -= dt;
+    if (this._eventTimer <= 0) {
+      this.triggerOfficeEvent();
+      this._eventTimer =
+        OFFICE_EVENT_INTERVAL_MIN_SEC +
+        Math.random() * (OFFICE_EVENT_INTERVAL_MAX_SEC - OFFICE_EVENT_INTERVAL_MIN_SEC);
+    }
+
+    // Lerp ambient tint opacity toward target
+    this._ambientTintOpacity +=
+      (this._ambientTintTarget - this._ambientTintOpacity) *
+      (1 - Math.exp(-AMBIENT_TINT_LERP_SPEED * dt));
+
     // Furniture animation cycling
     const prevFrame = Math.floor(this.furnitureAnimTimer / FURNITURE_ANIM_INTERVAL_SEC);
     this.furnitureAnimTimer += dt;
@@ -732,6 +880,13 @@ export class OfficeState {
             ch.matrixEffect = null;
             ch.matrixEffectTimer = 0;
             ch.matrixEffectSeeds = [];
+            // Show pending spawn greeting after a brief delay
+            if (ch.pendingSpawnGreeting !== null) {
+              ch.chatterText = null;
+              // Use chatterTimer as a delay countdown; pendingSpawnGreeting holds the text.
+              // The greeting display is handled in the post-FSM loop below.
+              ch.chatterTimer = SPAWN_GREETING_DELAY_SEC;
+            }
           } else {
             // Despawn complete — mark for deletion
             toDelete.push(ch.id);
@@ -742,7 +897,15 @@ export class OfficeState {
 
       // Temporarily unblock own seat so character can pathfind to it
       this.withOwnSeatUnblocked(ch, () =>
-        updateCharacter(ch, dt, this.walkableTiles, this.seats, this.tileMap, this.blockedTiles),
+        updateCharacter(
+          ch,
+          dt,
+          this.walkableTiles,
+          this.seats,
+          this.tileMap,
+          this.blockedTiles,
+          this._breakSpotTiles,
+        ),
       );
 
       // Tick bubble timer for waiting bubbles
@@ -751,6 +914,27 @@ export class OfficeState {
         if (ch.bubbleTimer <= 0) {
           ch.bubbleType = null;
           ch.bubbleTimer = 0;
+        }
+      }
+
+      // Tick pending spawn greeting delay, then display countdown
+      if (ch.pendingSpawnGreeting !== null) {
+        if (ch.chatterText === null) {
+          // Delay phase: count down to showing the greeting
+          ch.chatterTimer -= dt;
+          if (ch.chatterTimer <= 0) {
+            ch.chatterText = ch.pendingSpawnGreeting;
+            ch.chatterTimer = SPAWN_GREETING_DISPLAY_SEC;
+            ch.pendingSpawnGreeting = null;
+          }
+        }
+      } else if (ch.chatterText !== null && ch.chatterTimer > 0 && ch.isActive) {
+        // Display phase: count down to clearing the greeting (only while active, since
+        // updateCharacter handles the chatterTimer for inactive characters)
+        ch.chatterTimer -= dt;
+        if (ch.chatterTimer <= 0) {
+          ch.chatterText = null;
+          ch.chatterTimer = 0;
         }
       }
     }

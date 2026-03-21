@@ -15,6 +15,7 @@ import type { EditorState } from '../editor/editorState.js';
 import { startGameLoop } from '../engine/gameLoop.js';
 import type { OfficeState } from '../engine/officeState.js';
 import type {
+  AmbientRenderState,
   DeleteButtonBounds,
   EditorRenderState,
   RotateButtonBounds,
@@ -252,6 +253,8 @@ export function OfficeCanvas({
           characters: officeState.characters,
         };
 
+        const ambientRender: AmbientRenderState = officeState.ambientTint;
+
         const { offsetX, offsetY } = renderFrame(
           ctx,
           w,
@@ -267,6 +270,7 @@ export function OfficeCanvas({
           officeState.getLayout().tileColors,
           officeState.getLayout().cols,
           officeState.getLayout().rows,
+          ambientRender,
         );
         offsetRef.current = { x: offsetX, y: offsetY };
 

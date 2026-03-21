@@ -1,4 +1,13 @@
 import {
+  IDLE_CHATTER_DISPLAY_SEC,
+  IDLE_CHATTER_INTERVAL_MAX_SEC,
+  IDLE_CHATTER_INTERVAL_MIN_SEC,
+  LOOKING_BUSY_GLANCE_DURATION_SEC,
+  LOOKING_BUSY_GLANCE_MAX_SEC,
+  LOOKING_BUSY_GLANCE_MIN_SEC,
+  LOOKING_BUSY_PHRASE_DISPLAY_SEC,
+  LOOKING_BUSY_PHRASE_MAX_SEC,
+  LOOKING_BUSY_PHRASE_MIN_SEC,
   SEAT_REST_MAX_SEC,
   SEAT_REST_MIN_SEC,
   TYPE_FRAME_DURATION_SEC,
@@ -8,8 +17,15 @@ import {
   WANDER_MOVES_BEFORE_REST_MIN,
   WANDER_PAUSE_MAX_SEC,
   WANDER_PAUSE_MIN_SEC,
+  WATER_COOLER_BREAK_MAX_SEC,
+  WATER_COOLER_BREAK_MIN_SEC,
+  WATER_COOLER_PHRASE_DISPLAY_SEC,
+  WATER_COOLER_VISIT_CHANCE,
 } from '../../constants.js';
+import { getBreakPhrase } from '../breakPhrases.js';
+import { getIdleChatterPhrase } from '../idleChatter.js';
 import { findPath } from '../layout/tileMap.js';
+import { getRandomLookingBusyPhrase } from '../lookingBusyPhrases.js';
 import type { CharacterSprites } from '../sprites/spriteData.js';
 import type { Character, Seat, SpriteData, TileType as TileTypeVal } from '../types.js';
 import { CharacterState, Direction, TILE_SIZE } from '../types.js';
@@ -87,6 +103,14 @@ export function createCharacter(
     emoteTimer: 0,
     activityText: null,
     activityTextTimer: 0,
+    chatterText: null,
+    chatterTimer: 0,
+    isPermissionWaiting: false,
+    lookingBusyPhraseTimer: 0,
+    lookingBusyGlanceTimer: 0,
+    lookingBusyGlanceRestoreTimer: 0,
+    pendingSpawnGreeting: null,
+    breakTimer: 0,
   };
 }
 
@@ -97,6 +121,7 @@ export function updateCharacter(
   seats: Map<string, Seat>,
   tileMap: TileTypeVal[][],
   blockedTiles: Set<string>,
+  breakSpotTiles: Set<string>,
 ): void {
   ch.frameTimer += dt;
 
@@ -115,12 +140,75 @@ export function updateCharacter(
     }
   }
 
+  // Idle chatter tick — only when waiting and not animating
+  if (!ch.isActive && ch.matrixEffect === null && !ch.isSubagent) {
+    if (ch.chatterTimer > 0) {
+      ch.chatterTimer -= dt;
+      if (ch.chatterTimer <= 0) {
+        if (ch.chatterText === null) {
+          // Timer expired while waiting to fire — show a phrase
+          ch.chatterText = getIdleChatterPhrase();
+          ch.chatterTimer = IDLE_CHATTER_DISPLAY_SEC;
+        } else {
+          // Display timer expired — clear phrase and schedule next
+          ch.chatterText = null;
+          ch.chatterTimer =
+            IDLE_CHATTER_INTERVAL_MIN_SEC +
+            Math.random() * (IDLE_CHATTER_INTERVAL_MAX_SEC - IDLE_CHATTER_INTERVAL_MIN_SEC);
+        }
+      }
+    }
+  }
+
   switch (ch.state) {
     case CharacterState.TYPE: {
       if (ch.frameTimer >= TYPE_FRAME_DURATION_SEC) {
         ch.frameTimer -= TYPE_FRAME_DURATION_SEC;
         ch.frame = (ch.frame + 1) % 2;
       }
+
+      // Looking busy tick (permission wait)
+      if (ch.isPermissionWaiting) {
+        // 1. Glance restore — runs first, highest priority
+        if (ch.lookingBusyGlanceRestoreTimer > 0) {
+          ch.lookingBusyGlanceRestoreTimer -= dt;
+          if (ch.lookingBusyGlanceRestoreTimer <= 0) {
+            ch.lookingBusyGlanceRestoreTimer = 0;
+            // Restore facing direction from seat
+            const seat = seats.get(ch.seatId ?? '');
+            if (seat) ch.dir = seat.facingDir;
+          }
+        }
+
+        // 2. Phrase timer
+        if (ch.lookingBusyPhraseTimer > 0) {
+          ch.lookingBusyPhraseTimer -= dt;
+          if (ch.lookingBusyPhraseTimer <= 0) {
+            ch.activityText = getRandomLookingBusyPhrase();
+            ch.activityTextTimer = LOOKING_BUSY_PHRASE_DISPLAY_SEC;
+            ch.lookingBusyPhraseTimer =
+              LOOKING_BUSY_PHRASE_MIN_SEC +
+              Math.random() * (LOOKING_BUSY_PHRASE_MAX_SEC - LOOKING_BUSY_PHRASE_MIN_SEC);
+          }
+        }
+
+        // 3. Glance timer
+        if (ch.lookingBusyGlanceTimer > 0 && ch.lookingBusyGlanceRestoreTimer === 0) {
+          ch.lookingBusyGlanceTimer -= dt;
+          if (ch.lookingBusyGlanceTimer <= 0) {
+            // Pick a direction that is NOT the current facing dir
+            const glanceDirs = ([Direction.LEFT, Direction.RIGHT] as const).filter(
+              (d) => d !== ch.dir,
+            );
+            ch.dir = glanceDirs[Math.floor(Math.random() * glanceDirs.length)];
+            ch.lookingBusyGlanceRestoreTimer = LOOKING_BUSY_GLANCE_DURATION_SEC;
+            ch.lookingBusyGlanceTimer =
+              LOOKING_BUSY_GLANCE_MIN_SEC +
+              Math.random() * (LOOKING_BUSY_GLANCE_MAX_SEC - LOOKING_BUSY_GLANCE_MIN_SEC);
+          }
+        }
+      }
+
       // If no longer active, stand up and start wandering (after seatTimer expires)
       if (!ch.isActive) {
         if (ch.seatTimer > 0) {
@@ -142,6 +230,12 @@ export function updateCharacter(
       // No idle animation — static pose
       ch.frame = 0;
       if (ch.seatTimer < 0) ch.seatTimer = 0; // clear turn-end sentinel
+      // Break timer countdown
+      if (ch.breakTimer > 0) {
+        ch.breakTimer -= dt;
+        if (ch.breakTimer <= 0) ch.breakTimer = 0;
+        break; // stay put until break ends
+      }
       // If became active, pathfind to seat
       if (ch.isActive) {
         if (!ch.seatId) {
@@ -198,6 +292,37 @@ export function updateCharacter(
               ch.state = CharacterState.WALK;
               ch.frame = 0;
               ch.frameTimer = 0;
+              break;
+            }
+          }
+        }
+        // Check for break spot visit (before regular wander)
+        if (
+          ch.breakTimer <= 0 &&
+          breakSpotTiles.size > 0 &&
+          Math.random() < WATER_COOLER_VISIT_CHANCE
+        ) {
+          // Pick a random break spot tile and try to path there
+          const candidates = Array.from(breakSpotTiles).filter((k) => {
+            const [c, r] = k.split(',').map(Number);
+            return walkableTiles.some((t) => t.col === c && t.row === r);
+          });
+          if (candidates.length > 0) {
+            const key = candidates[Math.floor(Math.random() * candidates.length)];
+            const [bc, br] = key.split(',').map(Number);
+            const path = findPath(ch.tileCol, ch.tileRow, bc, br, tileMap, blockedTiles);
+            if (path.length > 0) {
+              ch.path = path;
+              ch.moveProgress = 0;
+              ch.state = CharacterState.WALK;
+              ch.frame = 0;
+              ch.frameTimer = 0;
+              ch.wanderCount++; // counts as a wander move
+              // Set break timer so WALK completion knows this is a break trip
+              ch.breakTimer =
+                WATER_COOLER_BREAK_MIN_SEC +
+                Math.random() * (WATER_COOLER_BREAK_MAX_SEC - WATER_COOLER_BREAK_MIN_SEC);
+              ch.wanderTimer = randomRange(WANDER_PAUSE_MIN_SEC, WANDER_PAUSE_MAX_SEC); // reset timer
               break;
             }
           }
@@ -276,8 +401,16 @@ export function updateCharacter(
               break;
             }
           }
-          ch.state = CharacterState.IDLE;
-          ch.wanderTimer = randomRange(WANDER_PAUSE_MIN_SEC, WANDER_PAUSE_MAX_SEC);
+          if (ch.breakTimer > 0 && breakSpotTiles.has(`${ch.tileCol},${ch.tileRow}`)) {
+            // Arrived at break spot — show phrase, timer already counting
+            ch.state = CharacterState.IDLE;
+            ch.chatterText = getBreakPhrase();
+            ch.chatterTimer = WATER_COOLER_PHRASE_DISPLAY_SEC;
+            // breakTimer keeps running (set during IDLE wander decision)
+          } else {
+            ch.state = CharacterState.IDLE;
+            ch.wanderTimer = randomRange(WANDER_PAUSE_MIN_SEC, WANDER_PAUSE_MAX_SEC);
+          }
         }
         ch.frame = 0;
         ch.frameTimer = 0;
