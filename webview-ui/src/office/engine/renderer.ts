@@ -515,6 +515,103 @@ export function renderBubbles(
   }
 }
 
+// ── Emote and activity bubbles ──────────────────────────────────
+
+export function renderEmoteBubbles(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  // Constants (scale with zoom)
+  const EMOTE_SIZE = Math.round(14 * zoom);
+  const EMOTE_GAP = Math.round(2 * zoom);
+  const THOUGHT_MAX_W = Math.round(80 * zoom);
+  const THOUGHT_PADDING = Math.round(3 * zoom);
+  const THOUGHT_LINE_H = Math.round(9 * zoom);
+  const EMOTE_FONT_SIZE = Math.round(10 * zoom);
+  const TEXT_FONT_SIZE = Math.max(8, Math.round(7 * zoom));
+  const BUBBLE_GAP = Math.round(2 * zoom);
+
+  ctx.save();
+  for (const ch of characters) {
+    if (ch.matrixEffect === 'despawn') continue;
+
+    const sittingOff = ch.state === CharacterState.TYPE ? BUBBLE_SITTING_OFFSET_PX : 0;
+    // Sprite top-center in canvas coords
+    const cx = Math.round(offsetX + ch.x * zoom);
+    const headY = Math.round(offsetY + (ch.y + sittingOff) * zoom) - Math.round(zoom * 16);
+
+    // -- Emote bubble --
+    let emoteBoxBottom = headY - EMOTE_GAP;
+    if (ch.emote) {
+      const ex = cx - EMOTE_SIZE / 2;
+      const ey = emoteBoxBottom - EMOTE_SIZE;
+
+      // Background: dark box, no border-radius (pixel art)
+      ctx.fillStyle = 'rgba(20, 20, 36, 0.92)';
+      ctx.fillRect(Math.round(ex), Math.round(ey), EMOTE_SIZE, EMOTE_SIZE);
+
+      // Emoji text centered in box
+      ctx.font = `${EMOTE_FONT_SIZE}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(ch.emote, Math.round(cx), Math.round(ey + EMOTE_SIZE / 2));
+
+      emoteBoxBottom = Math.round(ey) - BUBBLE_GAP;
+    }
+
+    // -- Thought/activity bubble --
+    if (ch.activityText) {
+      ctx.font = `${TEXT_FONT_SIZE}px monospace`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+
+      // Word-wrap the text
+      const words = ch.activityText.split(' ');
+      const lines: string[] = [];
+      let currentLine = '';
+      const innerW = THOUGHT_MAX_W - THOUGHT_PADDING * 2;
+      for (const word of words) {
+        const test = currentLine ? `${currentLine} ${word}` : word;
+        if (ctx.measureText(test).width <= innerW) {
+          currentLine = test;
+        } else {
+          if (currentLine) lines.push(currentLine);
+          currentLine = word;
+        }
+      }
+      if (currentLine) lines.push(currentLine);
+
+      const bubbleH = lines.length * THOUGHT_LINE_H + THOUGHT_PADDING * 2;
+      const bubbleW = Math.min(
+        THOUGHT_MAX_W,
+        Math.max(...lines.map((l) => ctx.measureText(l).width)) + THOUGHT_PADDING * 2,
+      );
+      const bx = Math.round(cx - bubbleW / 2);
+      const by = Math.round(emoteBoxBottom - bubbleH);
+
+      // Background
+      ctx.fillStyle = 'rgba(14, 14, 30, 0.90)';
+      ctx.fillRect(bx, by, bubbleW, bubbleH);
+      // Top border accent (1px, pixel art)
+      ctx.fillStyle = '#3a3a5c';
+      ctx.fillRect(bx, by, bubbleW, 1);
+
+      // Text lines
+      ctx.fillStyle = '#c8c8e8';
+      ctx.font = `${TEXT_FONT_SIZE}px monospace`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], bx + THOUGHT_PADDING, by + THOUGHT_PADDING + i * THOUGHT_LINE_H);
+      }
+    }
+  }
+  ctx.restore();
+}
+
 export interface ButtonBounds {
   /** Center X in device pixels */
   cx: number;
@@ -617,6 +714,7 @@ export function renderFrame(
 
   // Speech bubbles (always on top of characters)
   renderBubbles(ctx, characters, offsetX, offsetY, zoom);
+  renderEmoteBubbles(ctx, characters, offsetX, offsetY, zoom);
 
   // Editor overlays
   if (editor) {

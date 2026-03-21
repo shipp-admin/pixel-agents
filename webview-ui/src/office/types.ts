@@ -190,4 +190,12 @@ export interface Character {
   matrixEffectSeeds: number[];
   /** Workspace folder name (only set for multi-root workspaces) */
   folderName?: string;
+  /** Current emote emoji to show above head (null = none) */
+  emote: string | null;
+  /** Countdown in seconds until emote auto-hides (counts down to 0 then cleared) */
+  emoteTimer: number;
+  /** Current activity text to show in thought bubble (null = none) */
+  activityText: string | null;
+  /** Countdown in seconds until activity text auto-hides */
+  activityTextTimer: number;
 }

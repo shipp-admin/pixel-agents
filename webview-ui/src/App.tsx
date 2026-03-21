@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { ActivityFeed } from './components/ActivityFeed.js';
 import { BottomToolbar } from './components/BottomToolbar.js';
 import { DebugView } from './components/DebugView.js';
 import { ZoomControls } from './components/ZoomControls.js';
@@ -15,7 +16,7 @@ import { OfficeState } from './office/engine/officeState.js';
 import { isRotatable } from './office/layout/furnitureCatalog.js';
 import { EditTool } from './office/types.js';
 import { isBrowserRuntime } from './runtime.js';
-import { vscode } from './vscodeApi.js';
+import { isWsMode, vscode } from './vscodeApi.js';
 
 // Game state lives outside React — updated imperatively by message handlers
 const officeStateRef = { current: null as OfficeState | null };
@@ -121,11 +122,19 @@ function EditActionBar({
 }
 
 function App() {
-  // Browser runtime (dev or static dist): dispatch mock messages after the
-  // useExtensionMessages listener has been registered.
+  // Browser runtime (dev or static dist): load assets from the Vite dev server.
+  // In pure mock mode (no WS), also inject fake agents for demo purposes.
+  // In relay (WS) mode, only load assets — the relay provides real agents.
   useEffect(() => {
-    if (isBrowserRuntime) {
-      void import('./browserMock.js').then(({ dispatchMockMessages }) => dispatchMockMessages());
+    if (isBrowserRuntime && !isWsMode) {
+      void import('./browserMock.js').then(({ dispatchMockAssets, dispatchMockAgents }) => {
+        dispatchMockAssets();
+        dispatchMockAgents();
+      });
+    } else if (isBrowserRuntime && isWsMode) {
+      void import('./browserMock.js').then(({ dispatchMockAssets }) => {
+        dispatchMockAssets();
+      });
     }
   }, []);
 
@@ -147,6 +156,7 @@ function App() {
     layoutWasReset,
     loadedAssets,
     workspaceFolders,
+    feedEntries,
   } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty);
 
   // Show migration notice once layout reset is detected
@@ -369,6 +379,8 @@ function App() {
           onSelectAgent={handleSelectAgent}
         />
       )}
+
+      {!isDebugMode && <ActivityFeed entries={feedEntries} />}
 
       {showMigrationNotice && (
         <div

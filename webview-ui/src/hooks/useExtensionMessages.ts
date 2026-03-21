@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 
+import type { FeedEntry } from '../components/ActivityFeed.js';
+import { MAX_FEED_ENTRIES } from '../constants.js';
 import { playDoneSound, setSoundEnabled } from '../notificationSound.js';
 import type { OfficeState } from '../office/engine/officeState.js';
+import { getFlavorText } from '../office/flavorText.js';
 import { setFloorSprites } from '../office/floorTiles.js';
 import { buildDynamicCatalog } from '../office/layout/furnitureCatalog.js';
 import { migrateLayoutColors } from '../office/layout/layoutSerializer.js';
@@ -10,6 +13,22 @@ import { extractToolName } from '../office/toolUtils.js';
 import type { OfficeLayout, ToolActivity } from '../office/types.js';
 import { setWallSprites } from '../office/wallTiles.js';
 import { vscode } from '../vscodeApi.js';
+
+const TOOL_EMOTES: Record<string, string> = {
+  Read: '📖',
+  Edit: '✏️',
+  Write: '✏️',
+  MultiEdit: '✏️',
+  Bash: '⚡',
+  Glob: '🔍',
+  Grep: '🔍',
+  WebFetch: '🌐',
+  WebSearch: '🌐',
+  Task: '🤖',
+  Agent: '🤖',
+  AskUserQuestion: '💬',
+  EnterPlanMode: '📋',
+};
 
 export interface SubagentCharacter {
   id: number;
@@ -57,6 +76,7 @@ export interface ExtensionMessageState {
   layoutWasReset: boolean;
   loadedAssets?: { catalog: FurnitureAsset[]; sprites: Record<string, string[][]> };
   workspaceFolders: WorkspaceFolder[];
+  feedEntries: FeedEntry[];
 }
 
 function saveAgentSeats(os: OfficeState): void {
@@ -87,6 +107,7 @@ export function useExtensionMessages(
     { catalog: FurnitureAsset[]; sprites: Record<string, string[][]> } | undefined
   >();
   const [workspaceFolders, setWorkspaceFolders] = useState<WorkspaceFolder[]>([]);
+  const [feedEntries, setFeedEntries] = useState<FeedEntry[]>([]);
 
   // Track whether initial layout has been loaded (ref to avoid re-render)
   const layoutReadyRef = useRef(false);
@@ -138,8 +159,32 @@ export function useExtensionMessages(
         const folderName = msg.folderName as string | undefined;
         setAgents((prev) => (prev.includes(id) ? prev : [...prev, id]));
         setSelectedAgent(id);
-        os.addAgent(id, undefined, undefined, undefined, undefined, folderName);
-        saveAgentSeats(os);
+        if (!layoutReadyRef.current) {
+          // Buffer until layoutLoaded drains pendingAgents
+          pendingAgents.push({ id, folderName });
+        } else {
+          os.addAgent(id, undefined, undefined, undefined, undefined, folderName);
+          saveAgentSeats(os);
+        }
+      } else if (msg.type === 'agentCreatedAsSubagent') {
+        const workerId = msg.id as number;
+        const parentId = msg.parentId as number;
+        const folderName = (msg.folderName as string | undefined) ?? 'worker';
+        const parentToolId = String(workerId);
+
+        if (!layoutReadyRef.current) {
+          // Can't create sub-agent before layout - it will be re-created on first tool event
+          return;
+        }
+
+        const subCharId = os.addSubagent(parentId, parentToolId);
+        setSubagentCharacters((prev) => {
+          if (prev.some((s) => s.id === subCharId)) return prev;
+          return [
+            ...prev,
+            { id: subCharId, parentAgentId: parentId, parentToolId, label: folderName },
+          ];
+        });
       } else if (msg.type === 'agentClosed') {
         const id = msg.id as number;
         setAgents((prev) => prev.filter((a) => a !== id));
@@ -207,6 +252,27 @@ export function useExtensionMessages(
         os.setAgentTool(id, toolName);
         os.setAgentActive(id, true);
         os.clearPermissionBubble(id);
+        // Emote + thought bubble
+        const emote = TOOL_EMOTES[toolName ?? ''] ?? '⚙️';
+        os.setEmote(id, emote);
+        const toolNameForFlavor = toolName ?? '';
+        os.setActivityText(id, getFlavorText(toolNameForFlavor, status));
+        // Feed entry
+        const folderName = os.characters.get(id)?.folderName ?? 'agent';
+        const feedEntry: FeedEntry = {
+          id: toolId,
+          agentId: id,
+          folderName,
+          status,
+          emoji: emote,
+          timestamp: Date.now(),
+          done: false,
+          flavorText: getFlavorText(toolNameForFlavor, status),
+        };
+        setFeedEntries((prev) => {
+          const next = prev.filter((e) => e.id !== toolId);
+          return [...next, feedEntry].slice(-MAX_FEED_ENTRIES);
+        });
         // Create sub-agent character for Task tool subtasks
         if (status.startsWith('Subtask:')) {
           const label = status.slice('Subtask:'.length).trim();
@@ -227,6 +293,8 @@ export function useExtensionMessages(
             [id]: list.map((t) => (t.toolId === toolId ? { ...t, done: true } : t)),
           };
         });
+        os.clearEmoteAndActivity(id);
+        setFeedEntries((prev) => prev.map((e) => (e.id === toolId ? { ...e, done: true } : e)));
       } else if (msg.type === 'agentToolsClear') {
         const id = msg.id as number;
         setAgentTools((prev) => {
@@ -246,6 +314,8 @@ export function useExtensionMessages(
         setSubagentCharacters((prev) => prev.filter((s) => s.parentAgentId !== id));
         os.setAgentTool(id, null);
         os.clearPermissionBubble(id);
+        os.clearEmoteAndActivity(id);
+        setFeedEntries((prev) => prev.filter((e) => e.agentId !== id));
       } else if (msg.type === 'agentSelected') {
         const id = msg.id as number;
         setSelectedAgent(id);
@@ -324,6 +394,10 @@ export function useExtensionMessages(
           const subToolName = extractToolName(status);
           os.setAgentTool(subId, subToolName);
           os.setAgentActive(subId, true);
+          const subEmote = TOOL_EMOTES[subToolName ?? ''] ?? '⚙️';
+          os.setEmote(subId, subEmote);
+          const toolNameForFlavor = subToolName ?? '';
+          os.setActivityText(subId, getFlavorText(toolNameForFlavor, status));
         }
       } else if (msg.type === 'subagentToolDone') {
         const id = msg.id as number;
@@ -342,6 +416,10 @@ export function useExtensionMessages(
             },
           };
         });
+        const subIdDone = os.getSubagentId(id, parentToolId);
+        if (subIdDone !== null) {
+          os.clearEmoteAndActivity(subIdDone);
+        }
       } else if (msg.type === 'subagentClear') {
         const id = msg.id as number;
         const parentToolId = msg.parentToolId as string;
@@ -357,6 +435,11 @@ export function useExtensionMessages(
           }
           return { ...prev, [id]: next };
         });
+        // Clear emote/activity before removing sub-agent character
+        const subIdClear = os.getSubagentId(id, parentToolId);
+        if (subIdClear !== null) {
+          os.clearEmoteAndActivity(subIdClear);
+        }
         // Remove sub-agent character
         os.removeSubagent(id, parentToolId);
         setSubagentCharacters((prev) =>
@@ -397,9 +480,9 @@ export function useExtensionMessages(
         }
       }
     };
-    window.addEventListener('message', handler);
+    const unsubscribe = vscode.onMessage(handler);
     vscode.postMessage({ type: 'webviewReady' });
-    return () => window.removeEventListener('message', handler);
+    return unsubscribe;
   }, [getOfficeState]);
 
   return {
@@ -413,5 +496,6 @@ export function useExtensionMessages(
     layoutWasReset,
     loadedAssets,
     workspaceFolders,
+    feedEntries,
   };
 }

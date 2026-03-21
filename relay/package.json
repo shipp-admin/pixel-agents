@@ -1,0 +1,22 @@
+{
+  "name": "pixel-agents-relay",
+  "version": "1.0.0",
+  "description": "WebSocket relay server for pixel-agents — receives Claude Code hook POSTs and broadcasts to browser clients",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

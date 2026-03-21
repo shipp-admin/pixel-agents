@@ -182,6 +182,47 @@ export class OfficeState {
   }
 
   /**
+   * Find the best free seat for an agent, preferring proximity to teammates
+   * sharing the same folderName. Falls back to any free seat if no teammates
+   * exist or no folderName is provided.
+   */
+  private findFreeSeatForFolder(folderName?: string): string | null {
+    if (!folderName) return this.findFreeSeat();
+
+    // Collect seated teammates with the same folderName
+    const teammates: Array<{ col: number; row: number }> = [];
+    for (const ch of this.characters.values()) {
+      if (ch.folderName === folderName && ch.seatId) {
+        const seat = this.seats.get(ch.seatId);
+        if (seat) {
+          teammates.push({ col: seat.seatCol, row: seat.seatRow });
+        }
+      }
+    }
+
+    // No teammates yet — fall back to first free seat
+    if (teammates.length === 0) return this.findFreeSeat();
+
+    // Score each free seat by minimum Manhattan distance to any teammate
+    let bestSeatId: string | null = null;
+    let bestDist = Infinity;
+    for (const [uid, seat] of this.seats) {
+      if (seat.assigned) continue;
+      let minDist = Infinity;
+      for (const t of teammates) {
+        const d = Math.abs(seat.seatCol - t.col) + Math.abs(seat.seatRow - t.row);
+        if (d < minDist) minDist = d;
+      }
+      if (minDist < bestDist) {
+        bestDist = minDist;
+        bestSeatId = uid;
+      }
+    }
+
+    return bestSeatId;
+  }
+
+  /**
    * Pick a diverse palette for a new agent based on currently active agents.
    * First 6 agents each get a unique skin (random order). Beyond 6, skins
    * repeat in balanced rounds with a random hue shift (≥45°).
@@ -238,7 +279,7 @@ export class OfficeState {
       }
     }
     if (!seatId) {
-      seatId = this.findFreeSeat();
+      seatId = this.findFreeSeatForFolder(folderName);
     }
 
     let ch: Character;
@@ -628,6 +669,34 @@ export class OfficeState {
       ch.bubbleType = 'waiting';
       ch.bubbleTimer = WAITING_BUBBLE_DURATION_SEC;
     }
+  }
+
+  /** Show an emote bubble above the character for the given duration (seconds) */
+  setEmote(id: number, emoji: string, durationSec = 3): void {
+    const ch = this.characters.get(id);
+    if (!ch) return;
+    ch.emote = emoji;
+    ch.emoteTimer = durationSec;
+    ch.activityText = null; // reset - will be set by caller separately
+    ch.activityTextTimer = 0;
+  }
+
+  /** Show activity text in the thought bubble above the character */
+  setActivityText(id: number, text: string, durationSec = 8): void {
+    const ch = this.characters.get(id);
+    if (!ch) return;
+    ch.activityText = text;
+    ch.activityTextTimer = durationSec;
+  }
+
+  /** Clear emote and activity text immediately */
+  clearEmoteAndActivity(id: number): void {
+    const ch = this.characters.get(id);
+    if (!ch) return;
+    ch.emote = null;
+    ch.emoteTimer = 0;
+    ch.activityText = null;
+    ch.activityTextTimer = 0;
   }
 
   /** Dismiss bubble on click — permission: instant, waiting: quick fade */

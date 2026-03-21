@@ -1,0 +1,37 @@
+{
+  "83a426dc-7041-4a93-aa9b-72a31a21062f": {
+    "relayId": 1,
+    "folderName": "demo-day",
+    "cwd": "/Users/jerushchristopher/Documents/Prosperi/demo-day"
+  },
+  "a102bd00-148a-4eb7-96b0-7d2cc62fcf76": {
+    "relayId": 2,
+    "folderName": "relay",
+    "cwd": "/Users/jerushchristopher/Documents/VSCode/pixel-agents/relay"
+  },
+  "test-uuid-001": {
+    "relayId": 3,
+    "folderName": "pixel-agents",
+    "cwd": "/Users/jerushchristopher/Documents/VSCode/pixel-agents"
+  },
+  "test-uuid-002": {
+    "relayId": 4,
+    "folderName": "another-project",
+    "cwd": "/Users/jerushchristopher/Documents/VSCode/another-project"
+  },
+  "test-verify-001": {
+    "relayId": 5,
+    "folderName": "pixel-agents",
+    "cwd": "/Users/jerushchristopher/Documents/VSCode/pixel-agents"
+  },
+  "99cc080f-e5e2-48c3-929c-14ad4ebc065a": {
+    "relayId": 6,
+    "folderName": "next-video-starter",
+    "cwd": "/Users/jerushchristopher/Documents/VSCode/next-video-starter"
+  },
+  "62de1332-f776-45de-bf18-5879b4c7cd4b": {
+    "relayId": 7,
+    "folderName": "pixel-agents",
+    "cwd": "/Users/jerushchristopher/Documents/VSCode/pixel-agents"
+  }
+}

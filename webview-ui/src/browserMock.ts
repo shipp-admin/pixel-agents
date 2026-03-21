@@ -25,6 +25,7 @@ import type {
   CatalogEntry,
   CharacterDirectionSprites,
 } from '../../shared/assets/types.ts';
+import { dispatchToHandlers } from './vscodeApi.js';
 
 interface MockPayload {
   characters: CharacterDirectionSprites[];
@@ -244,17 +245,18 @@ export async function initBrowserMock(): Promise<void> {
 }
 
 /**
- * Call inside a useEffect in App.tsx — after the window message listener
- * in useExtensionMessages has been registered.
+ * Dispatch only asset-loading messages (sprites, floor, walls, furniture, layout, settings).
+ * Safe to call in both mock mode and relay (WS) mode — loads real assets from the Vite dev
+ * server without injecting fake agents.
  */
-export function dispatchMockMessages(): void {
+export function dispatchMockAssets(): void {
   if (!mockPayload) return;
 
   const { characters, floorSprites, wallSets, furnitureCatalog, furnitureSprites, layout } =
     mockPayload;
 
   function dispatch(data: unknown): void {
-    window.dispatchEvent(new MessageEvent('message', { data }));
+    dispatchToHandlers(data);
   }
 
   // Must match the load order defined in CLAUDE.md:
@@ -265,6 +267,80 @@ export function dispatchMockMessages(): void {
   dispatch({ type: 'furnitureAssetsLoaded', catalog: furnitureCatalog, sprites: furnitureSprites });
   dispatch({ type: 'layoutLoaded', layout });
   dispatch({ type: 'settingsLoaded', soundEnabled: false });
+
+  console.log('[BrowserMock] Asset messages dispatched');
+}
+
+/**
+ * Dispatch only mock agent messages (3 fake agents with tool activities).
+ * Only used in pure mock mode (no relay).
+ */
+export function dispatchMockAgents(): void {
+  function dispatch(data: unknown): void {
+    dispatchToHandlers(data);
+  }
+
+  // ── Mock agents: create 3 animated characters after layout is processed ────
+  setTimeout(() => {
+    // Agent 1
+    dispatch({
+      type: 'agentCreated',
+      id: 1,
+      sessionId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567801',
+      folderName: 'pixel-agents',
+    });
+    // Agent 2
+    dispatch({
+      type: 'agentCreated',
+      id: 2,
+      sessionId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567802',
+      folderName: 'pixel-agents',
+    });
+    // Agent 3
+    dispatch({
+      type: 'agentCreated',
+      id: 3,
+      sessionId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567803',
+      folderName: 'pixel-agents',
+    });
+
+    // Give agents tool activities after a short delay so they animate
+    setTimeout(() => {
+      // Agent 1: Running a Bash command (typing animation)
+      dispatch({
+        type: 'agentToolStart',
+        id: 1,
+        toolId: 'tool-bash-001',
+        status: 'Running npm test',
+      });
+      // Agent 2: Reading a file (reading animation)
+      dispatch({
+        type: 'agentToolStart',
+        id: 2,
+        toolId: 'tool-read-001',
+        status: 'Reading src/index.ts',
+      });
+      // Agent 3: Editing a file (typing animation)
+      dispatch({
+        type: 'agentToolStart',
+        id: 3,
+        toolId: 'tool-edit-001',
+        status: 'Editing src/App.tsx',
+      });
+
+      console.log('[BrowserMock] Mock agents dispatched with tool activities');
+    }, 200);
+  }, 300);
+}
+
+/**
+ * Call inside a useEffect in App.tsx — after the window message listener
+ * in useExtensionMessages has been registered.
+ * Convenience wrapper that dispatches both assets and mock agents.
+ */
+export function dispatchMockMessages(): void {
+  dispatchMockAssets();
+  dispatchMockAgents();
 
   console.log('[BrowserMock] Messages dispatched');
 }

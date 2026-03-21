@@ -83,6 +83,10 @@ export function createCharacter(
     matrixEffect: null,
     matrixEffectTimer: 0,
     matrixEffectSeeds: [],
+    emote: null,
+    emoteTimer: 0,
+    activityText: null,
+    activityTextTimer: 0,
   };
 }
 
@@ -95,6 +99,21 @@ export function updateCharacter(
   blockedTiles: Set<string>,
 ): void {
   ch.frameTimer += dt;
+
+  if (ch.emoteTimer > 0) {
+    ch.emoteTimer -= dt;
+    if (ch.emoteTimer <= 0) {
+      ch.emote = null;
+      ch.emoteTimer = 0;
+    }
+  }
+  if (ch.activityTextTimer > 0) {
+    ch.activityTextTimer -= dt;
+    if (ch.activityTextTimer <= 0) {
+      ch.activityText = null;
+      ch.activityTextTimer = 0;
+    }
+  }
 
   switch (ch.state) {
     case CharacterState.TYPE: {

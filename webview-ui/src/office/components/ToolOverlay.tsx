@@ -84,6 +84,64 @@ export function ToolOverlay({
 
   return (
     <>
+      {/* Persistent folder-name labels (always visible for characters with folderName) */}
+      {allIds.map((id) => {
+        const ch = officeState.characters.get(id);
+        if (!ch || !ch.folderName) return null;
+
+        const isSelected = selectedId === id;
+        const isHovered = hoveredId === id;
+
+        // Hide the persistent label when the full overlay is visible (it already shows folderName)
+        const fullOverlayVisible = alwaysShowOverlay || isSelected || isHovered;
+        if (fullOverlayVisible) return null;
+
+        const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0;
+        const screenX = (deviceOffsetX + ch.x * zoom) / dpr;
+        const screenY =
+          (deviceOffsetY + (ch.y + sittingOffset - TOOL_OVERLAY_VERTICAL_OFFSET) * zoom) / dpr;
+
+        return (
+          <div
+            key={`folder-${id}`}
+            style={{
+              position: 'absolute',
+              left: screenX,
+              top: screenY - 6,
+              transform: 'translateX(-50%)',
+              pointerEvents: 'none',
+              opacity: 0.85,
+              zIndex: 'var(--pixel-overlay-z)',
+            }}
+          >
+            <div
+              style={{
+                background: 'var(--pixel-bg)',
+                border: '1px solid var(--pixel-border)',
+                borderRadius: 0,
+                padding: '1px 4px',
+                boxShadow: 'var(--pixel-shadow)',
+                whiteSpace: 'nowrap',
+                maxWidth: 120,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: '11px',
+                  color: 'var(--pixel-accent, #7c9ef8)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  display: 'block',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {ch.folderName}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+      {/* Full activity overlay (hover/selected/always-show) */}
       {allIds.map((id) => {
         const ch = officeState.characters.get(id);
         if (!ch) return null;
@@ -177,7 +235,7 @@ export function ToolOverlay({
                   style={{
                     fontSize: isSub ? '20px' : '22px',
                     fontStyle: isSub ? 'italic' : undefined,
-                    color: 'var(--vscode-foreground)',
+                    color: 'var(--vscode-foreground, #e0e0e0)',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     display: 'block',
@@ -188,14 +246,15 @@ export function ToolOverlay({
                 {ch.folderName && (
                   <span
                     style={{
-                      fontSize: '16px',
-                      color: 'var(--pixel-text-dim)',
+                      fontSize: '14px',
+                      color: 'var(--pixel-accent, #7c9ef8)',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       display: 'block',
+                      marginTop: 1,
                     }}
                   >
-                    {ch.folderName}
+                    📁 {ch.folderName}
                   </span>
                 )}
               </div>
