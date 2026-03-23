@@ -98,8 +98,8 @@ export function ToolOverlay({
 
         const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0;
         const screenX = (deviceOffsetX + ch.x * zoom) / dpr;
-        const screenY =
-          (deviceOffsetY + (ch.y + sittingOffset - TOOL_OVERLAY_VERTICAL_OFFSET) * zoom) / dpr;
+        // Position below feet (ch.y is the bottom-anchor of the sprite)
+        const spriteBottomY = (deviceOffsetY + (ch.y + sittingOffset) * zoom) / dpr;
 
         return (
           <div
@@ -107,7 +107,7 @@ export function ToolOverlay({
             style={{
               position: 'absolute',
               left: screenX,
-              top: screenY - 6,
+              top: spriteBottomY + 4,
               transform: 'translateX(-50%)',
               pointerEvents: 'none',
               opacity: 0.85,
