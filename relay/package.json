@@ -1,12 +1,22 @@
 {
-  "name": "pixel-agents-relay",
+  "name": "agenthq",
   "version": "1.0.0",
-  "description": "WebSocket relay server for pixel-agents — receives Claude Code hook POSTs and broadcasts to browser clients",
-  "private": true,
+  "description": "Watch your AI agents work in real-time — a live pixel-art office visualizer for Claude Code sessions",
+  "bin": {
+    "agenthq": "./bin/agenthq.js"
+  },
+  "files": [
+    "bin/",
+    "dist/"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "tsx watch --env-file=.env src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsc"
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "express": "^4.21.0",

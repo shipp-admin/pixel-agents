@@ -15,7 +15,7 @@ const RELAY_TOKEN = process.env.RELAY_TOKEN || '';
 const DIRECTORY_URL = process.env.DIRECTORY_URL || '';
 const DIRECTORY_TOKEN = process.env.DIRECTORY_TOKEN || '';
 const RELAY_PUBLIC_URL = process.env.RELAY_PUBLIC_URL || '';
-const RELAY_NAME = process.env.RELAY_NAME || 'My Pixel Office';
+const RELAY_NAME = process.env.RELAY_NAME || 'My AgentHQ';
 const RELAY_ID = process.env.RELAY_ID || `relay-${Date.now().toString(36)}`;
 
 // ── Initialize Stores ─────────────────────────────────────────
@@ -104,11 +104,26 @@ async function deregisterFromDirectory(): Promise<void> {
 server.listen(PORT, HOST, () => {
   console.log('');
   console.log('┌─────────────────────────────────────────────┐');
-  console.log('│         Pixel Agents Relay Server            │');
+  console.log('│               AgentHQ  🏢                    │');
   console.log('├─────────────────────────────────────────────┤');
-  console.log(`│  HTTP hooks:   http://${HOST}:${PORT}/hooks     │`);
-  console.log(`│  WebSocket:    ws://${HOST}:${PORT}              │`);
-  console.log(`│  Health:       http://${HOST}:${PORT}/health     │`);
+  console.log(`│  Relay running on port ${PORT}                  │`);
+  console.log('├─────────────────────────────────────────────┤');
+  console.log('│  Next steps:                                 │');
+  console.log('│                                              │');
+  console.log('│  1. Add hooks to ~/.claude/settings.json:    │');
+  console.log('│     "PreToolUse":  http://localhost:5175/hooks│');
+  console.log('│     "PostToolUse": http://localhost:5175/hooks│');
+  console.log('│     "SessionStart":http://localhost:5175/hooks│');
+  console.log('│     "Stop":        http://localhost:5175/hooks│');
+  console.log('│                                              │');
+  console.log('│  2. Open the office in your browser:         │');
+  console.log('│     https://agenthq.vercel.app               │');
+  console.log('│                                              │');
+  console.log('│  3. Connect via WebSocket:                   │');
+  console.log(`│     ?ws=ws://localhost:${PORT}                  │`);
+  console.log('│                                              │');
+  console.log('│  (Optional) Expose publicly with:            │');
+  console.log('│  cloudflared tunnel --url http://localhost:5175│');
   console.log('└─────────────────────────────────────────────┘');
   console.log('');
   void registerWithDirectory();
