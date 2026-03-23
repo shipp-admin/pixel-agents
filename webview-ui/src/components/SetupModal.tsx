@@ -126,7 +126,9 @@ export function SetupModal({ isOpen, onClose }: SetupModalProps) {
     "PreToolUse":    [{"hooks": [{"type": "http", "url": "http://localhost:5175/hooks", "timeout": 5}]}],
     "PostToolUse":   [{"hooks": [{"type": "http", "url": "http://localhost:5175/hooks", "timeout": 5}]}],
     "Stop":          [{"hooks": [{"type": "http", "url": "http://localhost:5175/hooks", "timeout": 5}]}],
-    "SessionEnd":    [{"hooks": [{"type": "http", "url": "http://localhost:5175/hooks", "timeout": 5}]}]
+    "SessionEnd":    [{"hooks": [{"type": "http", "url": "http://localhost:5175/hooks", "timeout": 5}]}],
+    "SubagentStart": [{"hooks": [{"type": "http", "url": "http://localhost:5175/hooks", "timeout": 5}]}],
+    "SubagentStop":  [{"hooks": [{"type": "http", "url": "http://localhost:5175/hooks", "timeout": 5}]}]
   }
 }`;
 

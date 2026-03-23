@@ -4,7 +4,15 @@ import * as os from 'os';
 import * as path from 'path';
 import * as readline from 'readline';
 
-const HOOK_EVENTS = ['SessionStart', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionEnd'];
+const HOOK_EVENTS = [
+  'SessionStart',
+  'PreToolUse',
+  'PostToolUse',
+  'Stop',
+  'SessionEnd',
+  'SubagentStart',
+  'SubagentStop',
+];
 const PORT_SCAN_LIMIT = 10;
 
 // ── Port resolution ───────────────────────────────────────────
@@ -162,7 +170,7 @@ export async function checkAndInstallHooks(port: number): Promise<void> {
   console.log(`  • File:   ${filePath}`);
   console.log(`  • Adds:   HTTP POST → http://localhost:${port}/hooks`);
   console.log('  • Events: SessionStart, PreToolUse, PostToolUse,');
-  console.log('            Stop, SessionEnd');
+  console.log('            Stop, SessionEnd, SubagentStart, SubagentStop');
   console.log('');
 
   const answer = await ask('  Add hooks to ~/.claude/settings.json? (Y/n) ');
