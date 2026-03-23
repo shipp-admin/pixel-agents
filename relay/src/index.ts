@@ -6,7 +6,7 @@ import { loadLayout } from './layoutStore';
 import type { HookPayload } from './protocol';
 import { getClientCount, initWebSocketServer } from './relayServer';
 import { loadSessionRegistry } from './sessionRegistry';
-import { checkAndInstallHooks } from './setupHooks';
+import { checkAndInstallHooks, findFreePort, updateHooksPort } from './setupHooks';
 
 const PORT = parseInt(process.env.PORT || '5175', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -102,51 +102,45 @@ async function deregisterFromDirectory(): Promise<void> {
   }
 }
 
-void checkAndInstallHooks(PORT).then(() => {
-  server.listen(PORT, HOST, () => {
+async function start(): Promise<void> {
+  // Resolve a free port — auto-increment if preferred port is taken
+  const resolvedPort = await findFreePort(PORT);
+  if (resolvedPort !== PORT) {
+    console.log(`  Port ${PORT} is in use — starting on port ${resolvedPort} instead.`);
+    updateHooksPort(PORT, resolvedPort);
+    console.log(`  Updated ~/.claude/settings.json hooks to port ${resolvedPort}.`);
+    console.log('');
+  }
+
+  await checkAndInstallHooks(resolvedPort);
+
+  server.listen(resolvedPort, HOST, () => {
     console.log('');
     console.log('┌─────────────────────────────────────────────┐');
     console.log('│           Shipp Agent HQ  🏢                  │');
     console.log('├─────────────────────────────────────────────┤');
-    console.log(`│  Relay running on port ${PORT}                  │`);
+    console.log(`│  Relay running on port ${resolvedPort}               │`);
     console.log('├─────────────────────────────────────────────┤');
     console.log('│  Open the office:                            │');
     console.log('│  https://pixel-agents-liard.vercel.app       │');
     console.log('│                                              │');
     console.log('│  Connect locally:                            │');
-    console.log(`│  ?ws=ws://localhost:${PORT}                     │`);
+    console.log(`│  ?ws=ws://localhost:${resolvedPort}                  │`);
     console.log('│                                              │');
     console.log('│  (Optional) Share with your team:            │');
-    console.log('│  cloudflared tunnel --url http://localhost:' + PORT + ' │');
+    console.log(`│  cloudflared tunnel --url http://localhost:${resolvedPort}│`);
     console.log('└─────────────────────────────────────────────┘');
     console.log('');
     void registerWithDirectory();
   });
 
   server.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code !== 'EADDRINUSE') throw err;
-
-    console.log('');
-    console.log(`  Port ${PORT} is already in use.`);
-
-    // Check if it's another Shipp Agent HQ instance
-    fetch(`http://localhost:${PORT}/health`)
-      .then((res) => res.json())
-      .then(() => {
-        console.log(`  Shipp Agent HQ is already running on port ${PORT}.`);
-        console.log('  No need to start it again.');
-        console.log('');
-        process.exit(0);
-      })
-      .catch(() => {
-        console.log('  A different process is using this port.');
-        console.log(`  To use a different port, run:`);
-        console.log(`    PORT=5176 npx shipp-agent-hq`);
-        console.log('');
-        process.exit(1);
-      });
+    console.error('[Server] Unexpected error:', err.message);
+    process.exit(1);
   });
-});
+}
+
+void start();
 
 // ── Graceful Shutdown ─────────────────────────────────────────
 

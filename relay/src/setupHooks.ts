@@ -1,9 +1,68 @@
 import * as fs from 'fs';
+import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
 import * as readline from 'readline';
 
 const HOOK_EVENTS = ['SessionStart', 'PreToolUse', 'PostToolUse', 'Stop', 'SessionEnd'];
+const PORT_SCAN_LIMIT = 10;
+
+// ── Port resolution ───────────────────────────────────────────
+
+function isPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = net.createServer();
+    probe.once('error', () => resolve(false));
+    probe.once('listening', () => probe.close(() => resolve(true)));
+    probe.listen(port, '127.0.0.1');
+  });
+}
+
+export async function findFreePort(preferredPort: number): Promise<number> {
+  for (let port = preferredPort; port < preferredPort + PORT_SCAN_LIMIT; port++) {
+    if (await isPortFree(port)) return port;
+  }
+  throw new Error(
+    `No free port found between ${preferredPort} and ${preferredPort + PORT_SCAN_LIMIT - 1}`,
+  );
+}
+
+export function updateHooksPort(oldPort: number, newPort: number): void {
+  const filePath = settingsPath();
+  let settings: Record<string, unknown> = {};
+  try {
+    if (fs.existsSync(filePath)) {
+      settings = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, unknown>;
+    }
+  } catch {
+    return;
+  }
+
+  const oldUrl = `http://localhost:${oldPort}/hooks`;
+  const newUrl = `http://localhost:${newPort}/hooks`;
+  const hooks = (settings['hooks'] ?? {}) as Record<string, unknown[]>;
+  let changed = false;
+
+  for (const event of HOOK_EVENTS) {
+    const eventHooks = hooks[event] as Array<{ hooks?: Array<{ url?: string }> }> | undefined;
+    if (!Array.isArray(eventHooks)) continue;
+    for (const group of eventHooks) {
+      if (!Array.isArray(group.hooks)) continue;
+      for (const h of group.hooks) {
+        if (h.url === oldUrl) {
+          h.url = newUrl;
+          changed = true;
+        }
+      }
+    }
+  }
+
+  if (changed) {
+    settings['hooks'] = hooks;
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(settings, null, 2) + '\n', 'utf8');
+  }
+}
 
 function settingsPath(): string {
   return path.join(os.homedir(), '.claude', 'settings.json');
