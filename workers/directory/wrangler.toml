@@ -1,0 +1,11 @@
+name = "pixel-agents-directory"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[[kv_namespaces]]
+binding = "OFFICES"
+id = "your-kv-namespace-id-here"
+preview_id = "your-kv-preview-namespace-id-here"
+
+[vars]
+DIRECTORY_TOKEN = ""

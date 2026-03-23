@@ -11,8 +11,26 @@ const clients: Set<TrackedClient> = new Set();
 let wss: WebSocketServer;
 
 /** Initialize the WebSocket server on top of the HTTP server */
-export function initWebSocketServer(server: HttpServer): WebSocketServer {
-  wss = new WebSocketServer({ server });
+export function initWebSocketServer(server: HttpServer, token: string): WebSocketServer {
+  wss = new WebSocketServer({
+    server,
+    verifyClient: (info, callback) => {
+      // If no token configured, allow all connections (dev mode)
+      if (!token) {
+        callback(true);
+        return;
+      }
+      // Extract token from query string: ws://host:port/?token=xxx
+      const url = new URL(info.req.url ?? '/', `http://${info.req.headers.host ?? 'localhost'}`);
+      const clientToken = url.searchParams.get('token');
+      if (clientToken === token) {
+        callback(true);
+      } else {
+        console.log('[WS] Rejected connection: invalid or missing token');
+        callback(false, 401, 'Unauthorized');
+      }
+    },
+  });
 
   // Wire up the broadcast function so hookHandler can send messages
   setBroadcast(broadcastToAll);

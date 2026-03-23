@@ -7,8 +7,16 @@ import type { HookPayload } from './protocol';
 import { getClientCount, initWebSocketServer } from './relayServer';
 import { loadSessionRegistry } from './sessionRegistry';
 
-const PORT = parseInt(process.env.PORT || '5174', 10);
+const PORT = parseInt(process.env.PORT || '5175', 10);
 const HOST = process.env.HOST || '0.0.0.0';
+const RELAY_TOKEN = process.env.RELAY_TOKEN || '';
+
+// Directory registration (optional — only if DIRECTORY_URL is set)
+const DIRECTORY_URL = process.env.DIRECTORY_URL || '';
+const DIRECTORY_TOKEN = process.env.DIRECTORY_TOKEN || '';
+const RELAY_PUBLIC_URL = process.env.RELAY_PUBLIC_URL || '';
+const RELAY_NAME = process.env.RELAY_NAME || 'My Pixel Office';
+const RELAY_ID = process.env.RELAY_ID || `relay-${Date.now().toString(36)}`;
 
 // ── Initialize Stores ─────────────────────────────────────────
 
@@ -57,7 +65,41 @@ app.post('/hooks', (req, res) => {
 // ── HTTP + WebSocket Server ───────────────────────────────────
 
 const server = createServer(app);
-initWebSocketServer(server);
+initWebSocketServer(server, RELAY_TOKEN);
+
+async function registerWithDirectory(): Promise<void> {
+  if (!DIRECTORY_URL || !RELAY_PUBLIC_URL) return;
+  try {
+    const res = await fetch(`${DIRECTORY_URL}/offices/${RELAY_ID}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(DIRECTORY_TOKEN ? { Authorization: `Bearer ${DIRECTORY_TOKEN}` } : {}),
+      },
+      body: JSON.stringify({ name: RELAY_NAME, wsUrl: RELAY_PUBLIC_URL }),
+    });
+    if (res.ok) {
+      console.log(`[Directory] Registered as "${RELAY_NAME}" (${RELAY_ID})`);
+    } else {
+      console.warn(`[Directory] Registration failed: ${res.status.toString()}`);
+    }
+  } catch (err) {
+    console.warn('[Directory] Registration error:', err);
+  }
+}
+
+async function deregisterFromDirectory(): Promise<void> {
+  if (!DIRECTORY_URL || !RELAY_PUBLIC_URL) return;
+  try {
+    await fetch(`${DIRECTORY_URL}/offices/${RELAY_ID}`, {
+      method: 'DELETE',
+      headers: DIRECTORY_TOKEN ? { Authorization: `Bearer ${DIRECTORY_TOKEN}` } : {},
+    });
+    console.log('[Directory] Deregistered');
+  } catch {
+    // Best-effort on shutdown
+  }
+}
 
 server.listen(PORT, HOST, () => {
   console.log('');
@@ -69,12 +111,14 @@ server.listen(PORT, HOST, () => {
   console.log(`│  Health:       http://${HOST}:${PORT}/health     │`);
   console.log('└─────────────────────────────────────────────┘');
   console.log('');
+  void registerWithDirectory();
 });
 
 // ── Graceful Shutdown ─────────────────────────────────────────
 
-function shutdown(signal: string): void {
+async function shutdown(signal: string): Promise<void> {
   console.log(`\n[Server] Received ${signal}, shutting down...`);
+  await deregisterFromDirectory();
   server.close(() => {
     console.log('[Server] HTTP server closed');
     process.exit(0);
@@ -87,5 +131,5 @@ function shutdown(signal: string): void {
   }, 5000);
 }
 
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));

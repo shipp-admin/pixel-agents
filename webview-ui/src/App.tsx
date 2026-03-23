@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityFeed } from './components/ActivityFeed.js';
 import { BottomToolbar } from './components/BottomToolbar.js';
 import { DebugView } from './components/DebugView.js';
+import { DirectoryPage } from './components/DirectoryPage.js';
 import { ZoomControls } from './components/ZoomControls.js';
 import { PULSE_ANIMATION_DURATION_SEC } from './constants.js';
 import { useEditorActions } from './hooks/useEditorActions.js';
@@ -228,6 +229,10 @@ function App() {
     })();
 
   if (!layoutReady) {
+    const directoryUrl = import.meta.env.VITE_DIRECTORY_URL as string | undefined;
+    if (isBrowserRuntime && !isWsMode && directoryUrl) {
+      return <DirectoryPage directoryUrl={directoryUrl} />;
+    }
     return (
       <div
         style={{

@@ -197,7 +197,7 @@ export async function initBrowserMock(): Promise<void> {
     fetch(`${base}assets/furniture-catalog.json`).then((r) => r.json()) as Promise<CatalogEntry[]>,
   ]);
 
-  const shouldTryDecoded = import.meta.env.DEV;
+  const shouldTryDecoded = true;
   const [decodedCharacters, decodedFloors, decodedWalls, decodedFurniture] = shouldTryDecoded
     ? await Promise.all([
         fetchJsonOptional<CharacterDirectionSprites[]>(`${base}assets/decoded/characters.json`),

@@ -1,0 +1,11 @@
+{
+  "buildCommand": "cd webview-ui && npm install && npm run build",
+  "outputDirectory": "dist/webview",
+  "framework": null,
+  "env": {
+    "TARGET": "vercel"
+  },
+  "rewrites": [
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+  ]
+}

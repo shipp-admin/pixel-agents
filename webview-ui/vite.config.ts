@@ -94,6 +94,26 @@ function browserMockAssetsPlugin(): Plugin {
         path.join(distAssetsDir, 'asset-index.json'),
         JSON.stringify(buildAssetIndex(assetsDir)),
       );
+
+      // Write pre-decoded sprite JSONs so production builds use fast JSON instead of in-browser PNG decode
+      const decodedDir = path.join(distAssetsDir, 'decoded');
+      fs.mkdirSync(decodedDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(decodedDir, 'characters.json'),
+        JSON.stringify(decodeAllCharacters(assetsDir)),
+      );
+      fs.writeFileSync(
+        path.join(decodedDir, 'floors.json'),
+        JSON.stringify(decodeAllFloors(assetsDir)),
+      );
+      fs.writeFileSync(
+        path.join(decodedDir, 'walls.json'),
+        JSON.stringify(decodeAllWalls(assetsDir)),
+      );
+      fs.writeFileSync(
+        path.join(decodedDir, 'furniture.json'),
+        JSON.stringify(decodeAllFurniture(assetsDir, catalog)),
+      );
     },
   };
 }
@@ -104,5 +124,5 @@ export default defineConfig({
     outDir: '../dist/webview',
     emptyOutDir: true,
   },
-  base: './',
+  base: process.env.TARGET === 'vercel' ? '/' : './',
 });
