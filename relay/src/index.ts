@@ -6,6 +6,7 @@ import { loadLayout } from './layoutStore';
 import type { HookPayload } from './protocol';
 import { getClientCount, initWebSocketServer } from './relayServer';
 import { loadSessionRegistry } from './sessionRegistry';
+import { checkAndInstallHooks } from './setupHooks';
 
 const PORT = parseInt(process.env.PORT || '5175', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -101,32 +102,26 @@ async function deregisterFromDirectory(): Promise<void> {
   }
 }
 
-server.listen(PORT, HOST, () => {
-  console.log('');
-  console.log('┌─────────────────────────────────────────────┐');
-  console.log('│           Shipp Agent HQ  🏢                  │');
-  console.log('├─────────────────────────────────────────────┤');
-  console.log(`│  Relay running on port ${PORT}                  │`);
-  console.log('├─────────────────────────────────────────────┤');
-  console.log('│  Next steps:                                 │');
-  console.log('│                                              │');
-  console.log('│  1. Add hooks to ~/.claude/settings.json:    │');
-  console.log('│     "PreToolUse":  http://localhost:5175/hooks│');
-  console.log('│     "PostToolUse": http://localhost:5175/hooks│');
-  console.log('│     "SessionStart":http://localhost:5175/hooks│');
-  console.log('│     "Stop":        http://localhost:5175/hooks│');
-  console.log('│                                              │');
-  console.log('│  2. Open the office in your browser:         │');
-  console.log('│     https://agenthq.vercel.app               │');
-  console.log('│                                              │');
-  console.log('│  3. Connect via WebSocket:                   │');
-  console.log(`│     ?ws=ws://localhost:${PORT}                  │`);
-  console.log('│                                              │');
-  console.log('│  (Optional) Expose publicly with:            │');
-  console.log('│  cloudflared tunnel --url http://localhost:5175│');
-  console.log('└─────────────────────────────────────────────┘');
-  console.log('');
-  void registerWithDirectory();
+void checkAndInstallHooks(PORT).then(() => {
+  server.listen(PORT, HOST, () => {
+    console.log('');
+    console.log('┌─────────────────────────────────────────────┐');
+    console.log('│           Shipp Agent HQ  🏢                  │');
+    console.log('├─────────────────────────────────────────────┤');
+    console.log(`│  Relay running on port ${PORT}                  │`);
+    console.log('├─────────────────────────────────────────────┤');
+    console.log('│  Open the office:                            │');
+    console.log('│  https://pixel-agents-liard.vercel.app       │');
+    console.log('│                                              │');
+    console.log('│  Connect locally:                            │');
+    console.log(`│  ?ws=ws://localhost:${PORT}                     │`);
+    console.log('│                                              │');
+    console.log('│  (Optional) Share with your team:            │');
+    console.log('│  cloudflared tunnel --url http://localhost:' + PORT + ' │');
+    console.log('└─────────────────────────────────────────────┘');
+    console.log('');
+    void registerWithDirectory();
+  });
 });
 
 // ── Graceful Shutdown ─────────────────────────────────────────
