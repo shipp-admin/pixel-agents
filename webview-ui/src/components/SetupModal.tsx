@@ -171,13 +171,12 @@ export function SetupModal({ isOpen, onClose }: SetupModalProps) {
         <div style={stepStyle}>
           <div style={labelStyle}>
             <span style={stepNumStyle}>1</span>
-            <span>Install & start the relay server</span>
+            <span>Start the relay server</span>
           </div>
           <p style={dimStyle}>
             The relay receives Claude Code hook events and forwards them to this page.
           </p>
-          <CopyBlock text="git clone https://github.com/shipp-admin/pixel-agents.git" />
-          <CopyBlock text="cd pixel-agents/relay && npm install && npm run dev" />
+          <CopyBlock text="npx shipp-agent-hq" />
         </div>
 
         {/* Step 2 */}
