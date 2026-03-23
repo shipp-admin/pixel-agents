@@ -77,13 +77,53 @@ function hasHook(settings: Record<string, unknown>, event: string, url: string):
   );
 }
 
-function ask(question: string): Promise<string> {
+export function ask(question: string): Promise<string> {
   return new Promise((resolve) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.on('SIGINT', () => {
+      rl.close();
+      process.exit(0);
+    });
     rl.question(question, (answer) => {
       rl.close();
       resolve(answer.trim());
     });
+  });
+}
+
+export function askNumber(
+  question: string,
+  min: number,
+  max: number,
+  defaultVal: number,
+): Promise<number> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.on('SIGINT', () => {
+      rl.close();
+      process.exit(0);
+    });
+
+    const prompt = (): void => {
+      rl.question(question, (answer) => {
+        const trimmed = answer.trim();
+        if (trimmed === '') {
+          rl.close();
+          resolve(defaultVal);
+          return;
+        }
+        const num = Number(trimmed);
+        if (!Number.isNaN(num) && num >= min && num <= max) {
+          rl.close();
+          resolve(num);
+          return;
+        }
+        process.stdout.write(`  Please enter a number between ${min} and ${max}.\n`);
+        prompt();
+      });
+    };
+
+    prompt();
   });
 }
 
