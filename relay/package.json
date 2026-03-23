@@ -1,9 +1,9 @@
 {
-  "name": "agenthq",
+  "name": "shipp-agent-hq",
   "version": "1.0.0",
   "description": "Watch your AI agents work in real-time — a live pixel-art office visualizer for Claude Code sessions",
   "bin": {
-    "agenthq": "./bin/agenthq.js"
+    "shipp-agent-hq": "./bin/agenthq.js"
   },
   "files": [
     "bin/",

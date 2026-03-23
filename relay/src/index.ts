@@ -104,7 +104,7 @@ async function deregisterFromDirectory(): Promise<void> {
 server.listen(PORT, HOST, () => {
   console.log('');
   console.log('┌─────────────────────────────────────────────┐');
-  console.log('│               AgentHQ  🏢                    │');
+  console.log('│           Shipp Agent HQ  🏢                  │');
   console.log('├─────────────────────────────────────────────┤');
   console.log(`│  Relay running on port ${PORT}                  │`);
   console.log('├─────────────────────────────────────────────┤');

@@ -1,18 +1,18 @@
-# AgentHQ
+# Shipp Agent HQ
 
 Watch your AI agents work in real-time — a live pixel-art office visualizer for Claude Code sessions.
 
 ## Quick Start
 
 ```bash
-npx agenthq
+npx shipp-agent-hq
 ```
 
 Then follow the 3 steps printed in your terminal.
 
 ## How it works
 
-AgentHQ runs a local relay server that receives Claude Code hook events and streams them to a shared pixel-art office in your browser. Each Claude session becomes a character that walks around, sits at a desk, and animates based on what it's doing.
+Shipp Agent HQ runs a local relay server that receives Claude Code hook events and streams them to a shared pixel-art office in your browser. Each Claude session becomes a character that walks around, sits at a desk, and animates based on what it's doing.
 
 ## Environment variables
 
@@ -26,10 +26,10 @@ AgentHQ runs a local relay server that receives Claude Code hook events and stre
 ## Usage with token auth
 
 ```bash
-RELAY_TOKEN=mysecret npx agenthq
+RELAY_TOKEN=mysecret npx shipp-agent-hq
 ```
 
-Then connect with: `https://agenthq.vercel.app/?ws=wss://your-tunnel.trycloudflare.com?token=mysecret`
+Then connect with: `https://pixel-agents-liard.vercel.app/?ws=wss://your-tunnel.trycloudflare.com?token=mysecret`
 
 ## License
 
