@@ -122,6 +122,30 @@ void checkAndInstallHooks(PORT).then(() => {
     console.log('');
     void registerWithDirectory();
   });
+
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code !== 'EADDRINUSE') throw err;
+
+    console.log('');
+    console.log(`  Port ${PORT} is already in use.`);
+
+    // Check if it's another Shipp Agent HQ instance
+    fetch(`http://localhost:${PORT}/health`)
+      .then((res) => res.json())
+      .then(() => {
+        console.log(`  Shipp Agent HQ is already running on port ${PORT}.`);
+        console.log('  No need to start it again.');
+        console.log('');
+        process.exit(0);
+      })
+      .catch(() => {
+        console.log('  A different process is using this port.');
+        console.log(`  To use a different port, run:`);
+        console.log(`    PORT=5176 npx shipp-agent-hq`);
+        console.log('');
+        process.exit(1);
+      });
+  });
 });
 
 // ── Graceful Shutdown ─────────────────────────────────────────
