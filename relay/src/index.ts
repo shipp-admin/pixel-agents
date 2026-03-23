@@ -129,12 +129,12 @@ function printBanner(port: number, tunnelUrl: string | null, relayId: string): v
     console.log('│  Or connect directly (changes on restart):   │');
     console.log(`│    ?ws=${wsUrl}  │`);
   } else {
-    console.log('│  Your stable share URL (bookmark this):      │');
+    console.log('│  Open the office (local):                    │');
     console.log('│  https://pixel-agents-liard.vercel.app       │');
-    console.log(`│    ?office=${relayId}                         │`);
-    console.log('│                                              │');
-    console.log('│  Direct WebSocket (changes on restart):      │');
     console.log(`│    ?ws=ws://localhost:${port}                    │`);
+    console.log('│                                              │');
+    console.log('│  To get a stable shareable URL, restart and  │');
+    console.log('│  choose option 2 (Share with team).          │');
   }
   console.log('└─────────────────────────────────────────────┘');
   console.log('');
