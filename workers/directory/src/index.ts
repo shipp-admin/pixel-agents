@@ -40,6 +40,15 @@ export default {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
+    // GET /offices/:id — single office lookup
+    if (method === 'GET' && url.pathname.startsWith('/offices/')) {
+      const id = url.pathname.slice('/offices/'.length);
+      if (!id) return jsonResponse({ error: 'Missing id' }, 400);
+      const value = await env.OFFICES.get(id);
+      if (!value) return jsonResponse({ error: 'Not found' }, 404);
+      return jsonResponse(JSON.parse(value) as OfficeRecord);
+    }
+
     // GET /offices — list all
     if (method === 'GET' && url.pathname === '/offices') {
       const list = await env.OFFICES.list();

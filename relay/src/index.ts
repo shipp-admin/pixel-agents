@@ -1,22 +1,18 @@
-import { spawn } from 'child_process';
 import type { ChildProcess } from 'child_process';
 
 import express from 'express';
 import { createServer } from 'http';
 
+import { writePid } from './daemon';
 import { handleHook } from './hookHandler';
 import { loadLayout } from './layoutStore';
 import type { HookPayload } from './protocol';
+import { loadRelayConfig } from './relayConfig';
 import { getClientCount, initWebSocketServer } from './relayServer';
 import { loadSessionRegistry } from './sessionRegistry';
-import { askNumber, checkAndInstallHooks, findFreePort, updateHooksPort } from './setupHooks';
-import {
-  getInstallCommand,
-  installCloudflared,
-  isCloudflaredInstalled,
-  killTunnel,
-  startTunnel,
-} from './setupTunnel';
+import { findFreePort } from './setupHooks';
+import { killTunnel, startTunnel } from './setupTunnel';
+import { runWizard } from './wizard';
 
 const PORT = parseInt(process.env.PORT || '5175', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -27,7 +23,6 @@ const DIRECTORY_URL = process.env.DIRECTORY_URL || '';
 const DIRECTORY_TOKEN = process.env.DIRECTORY_TOKEN || '';
 const RELAY_PUBLIC_URL = process.env.RELAY_PUBLIC_URL || '';
 const RELAY_NAME = process.env.RELAY_NAME || 'My AgentHQ';
-const RELAY_ID = process.env.RELAY_ID || `relay-${Date.now().toString(36)}`;
 
 let tunnelProc: ChildProcess | null = null;
 
@@ -80,122 +75,45 @@ app.post('/hooks', (req, res) => {
 const server = createServer(app);
 initWebSocketServer(server, RELAY_TOKEN);
 
-async function registerWithDirectory(): Promise<void> {
+function registerWithDirectory(relayId: string): void {
   if (!DIRECTORY_URL || !RELAY_PUBLIC_URL) return;
-  try {
-    const res = await fetch(`${DIRECTORY_URL}/offices/${RELAY_ID}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(DIRECTORY_TOKEN ? { Authorization: `Bearer ${DIRECTORY_TOKEN}` } : {}),
-      },
-      body: JSON.stringify({ name: RELAY_NAME, wsUrl: RELAY_PUBLIC_URL }),
-    });
-    if (res.ok) {
-      console.log(`[Directory] Registered as "${RELAY_NAME}" (${RELAY_ID})`);
-    } else {
-      console.warn(`[Directory] Registration failed: ${res.status.toString()}`);
+  void (async () => {
+    try {
+      const res = await fetch(`${DIRECTORY_URL}/offices/${relayId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(DIRECTORY_TOKEN ? { Authorization: `Bearer ${DIRECTORY_TOKEN}` } : {}),
+        },
+        body: JSON.stringify({ name: RELAY_NAME, wsUrl: RELAY_PUBLIC_URL }),
+      });
+      if (res.ok) {
+        console.log(`[Directory] Registered as "${RELAY_NAME}" (${relayId})`);
+      } else {
+        console.warn(`[Directory] Registration failed: ${res.status.toString()}`);
+      }
+    } catch (err) {
+      console.warn('[Directory] Registration error:', err);
     }
-  } catch (err) {
-    console.warn('[Directory] Registration error:', err);
-  }
+  })();
 }
 
-async function deregisterFromDirectory(): Promise<void> {
+function deregisterFromDirectory(relayId: string): void {
   if (!DIRECTORY_URL || !RELAY_PUBLIC_URL) return;
-  try {
-    await fetch(`${DIRECTORY_URL}/offices/${RELAY_ID}`, {
-      method: 'DELETE',
-      headers: DIRECTORY_TOKEN ? { Authorization: `Bearer ${DIRECTORY_TOKEN}` } : {},
-    });
-    console.log('[Directory] Deregistered');
-  } catch {
-    // Best-effort on shutdown
-  }
+  void (async () => {
+    try {
+      await fetch(`${DIRECTORY_URL}/offices/${relayId}`, {
+        method: 'DELETE',
+        headers: DIRECTORY_TOKEN ? { Authorization: `Bearer ${DIRECTORY_TOKEN}` } : {},
+      });
+      console.log('[Directory] Deregistered');
+    } catch {
+      // Best-effort on shutdown
+    }
+  })();
 }
 
-async function askConnectionMode(port: number): Promise<'local' | 'tunnel'> {
-  // Skip prompt in non-interactive environments
-  if (!process.stdin.isTTY) return 'local';
-
-  console.log('  How do you want to connect?\n');
-  console.log('    1. Local only     — open the office on this machine');
-  console.log('    2. Share with team — expose via a public URL (uses cloudflared)');
-  console.log('');
-
-  const choice = await askNumber('  Enter 1 or 2 (default: 1): ', 1, 2, 1);
-  if (choice === 1) return 'local';
-
-  // User chose tunnel — check/install cloudflared
-  const installed = await isCloudflaredInstalled();
-  if (!installed) {
-    console.log('');
-    console.log('  cloudflared is not installed.');
-    console.log('');
-    console.log('  cloudflared is a free Cloudflare tool that creates a secure');
-    console.log('  public URL pointing to your local relay — no account needed.');
-    console.log('');
-
-    const installCmd = getInstallCommand();
-    if (installCmd) {
-      console.log(`  Install command: ${installCmd}`);
-    } else {
-      console.log('  Visit: https://developers.cloudflare.com/cloudflared/install');
-    }
-    console.log('');
-    console.log('    1. Install automatically');
-    console.log('    2. Open install instructions in browser');
-    console.log('    3. Skip — run local only');
-    console.log('');
-
-    const installChoice = await askNumber('  Enter 1, 2, or 3 (default: 1): ', 1, 3, 1);
-
-    if (installChoice === 2) {
-      const url = 'https://developers.cloudflare.com/cloudflared/install';
-      const openCmd =
-        process.platform === 'win32'
-          ? 'start'
-          : process.platform === 'darwin'
-            ? 'open'
-            : 'xdg-open';
-      spawn(openCmd, [url], { detached: true, stdio: 'ignore' }).unref();
-      console.log('');
-      console.log('  Opening install instructions in your browser...');
-      console.log('  Starting in local-only mode for now.');
-      console.log('');
-      return 'local';
-    }
-
-    if (installChoice === 3) {
-      console.log('');
-      console.log('  Starting in local-only mode.');
-      console.log('');
-      return 'local';
-    }
-
-    // installChoice === 1: auto-install
-    console.log('');
-    console.log('  Installing cloudflared...');
-    console.log('');
-    const success = await installCloudflared();
-    if (!success) {
-      console.log('');
-      console.log('  Installation failed. Starting in local-only mode.');
-      console.log(
-        '  Visit https://developers.cloudflare.com/cloudflared/install to install manually.',
-      );
-      console.log('');
-      return 'local';
-    }
-    console.log('');
-    console.log('  ✓ cloudflared installed.');
-    console.log('');
-  }
-
-  return 'tunnel';
-}
-
-function printBanner(port: number, tunnelUrl: string | null): void {
+function printBanner(port: number, tunnelUrl: string | null, relayId: string): void {
   console.log('');
   console.log('┌─────────────────────────────────────────────┐');
   console.log('│           Shipp Agent HQ  🏢                  │');
@@ -204,39 +122,29 @@ function printBanner(port: number, tunnelUrl: string | null): void {
   console.log('├─────────────────────────────────────────────┤');
   if (tunnelUrl) {
     const wsUrl = tunnelUrl.replace('https://', 'wss://');
-    console.log('│  Share this URL with your team:              │');
-    console.log(`│  https://pixel-agents-liard.vercel.app       │`);
-    console.log(`│    ?ws=${wsUrl}  │`);
-    console.log('│                                              │');
-    console.log('│  Or connect locally:                         │');
-    console.log(`│    ?ws=ws://localhost:${port}                    │`);
-  } else {
-    console.log('│  Open the office:                            │');
+    console.log('│  Your stable share URL (bookmark this):      │');
     console.log('│  https://pixel-agents-liard.vercel.app       │');
+    console.log(`│    ?office=${relayId}                         │`);
     console.log('│                                              │');
-    console.log('│  Connect locally:                            │');
+    console.log('│  Or connect directly (changes on restart):   │');
+    console.log(`│    ?ws=${wsUrl}  │`);
+  } else {
+    console.log('│  Your stable share URL (bookmark this):      │');
+    console.log('│  https://pixel-agents-liard.vercel.app       │');
+    console.log(`│    ?office=${relayId}                         │`);
+    console.log('│                                              │');
+    console.log('│  Direct WebSocket (changes on restart):      │');
     console.log(`│    ?ws=ws://localhost:${port}                    │`);
-    console.log('│                                              │');
-    console.log('│  (Optional) Share with your team:            │');
-    console.log(`│  cloudflared tunnel --url http://localhost:${port}│`);
   }
   console.log('└─────────────────────────────────────────────┘');
   console.log('');
 }
 
-async function start(): Promise<void> {
-  const resolvedPort = await findFreePort(PORT);
-  if (resolvedPort !== PORT) {
-    console.log(`  Port ${PORT} is in use — starting on port ${resolvedPort} instead.`);
-    updateHooksPort(PORT, resolvedPort);
-    console.log(`  Updated ~/.claude/settings.json hooks to port ${resolvedPort}.`);
-    console.log('');
-  }
-
-  await checkAndInstallHooks(resolvedPort);
-
-  const mode = await askConnectionMode(resolvedPort);
-
+async function startServer(
+  resolvedPort: number,
+  mode: 'local' | 'tunnel',
+  relayId: string,
+): Promise<void> {
   // Start the HTTP server
   await new Promise<void>((resolve) => server.listen(resolvedPort, HOST, resolve));
 
@@ -265,24 +173,70 @@ async function start(): Promise<void> {
         }
       });
 
-      printBanner(resolvedPort, url);
+      printBanner(resolvedPort, url, relayId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.log(`  [Tunnel] Failed to start: ${message}`);
       console.log('  Starting in local-only mode.');
       console.log('');
-      printBanner(resolvedPort, null);
+      printBanner(resolvedPort, null, relayId);
     }
   } else {
-    printBanner(resolvedPort, null);
+    printBanner(resolvedPort, null, relayId);
   }
 
-  void registerWithDirectory();
+  registerWithDirectory(relayId);
 }
 
-void start();
+// ── Full start (wizard + server) — used for direct/legacy runs ──
+
+async function start(): Promise<void> {
+  const { resolvedPort, mode, relayId } = await runWizard(PORT);
+  await startServer(resolvedPort, mode, relayId);
+}
+
+// ── Daemon child start (skip wizard, load saved config) ──
+
+async function startDaemonChild(): Promise<void> {
+  const resolvedPort = await findFreePort(PORT);
+  const config = loadRelayConfig(resolvedPort);
+  const relayId = process.env.RELAY_ID || config.relayId;
+
+  // Write our own PID
+  writePid(process.pid);
+
+  // Daemon child defaults to local mode (tunnel can be added later)
+  const mode: 'local' | 'tunnel' = 'local';
+  await startServer(resolvedPort, mode, relayId);
+}
+
+// ── Entry point dispatch ──
+
+if (process.env.SHIPP_DAEMON_CHILD === '1') {
+  // Daemon child: skip wizard, load saved config, start server directly
+  void startDaemonChild();
+} else {
+  // Direct run (npx without subcommands, legacy): run full wizard + server
+  void start();
+}
+
+export { start, startDaemonChild };
 
 // ── Graceful Shutdown ─────────────────────────────────────────
+
+let activeRelayId = '';
+
+// Capture relayId for shutdown — set after start completes
+void (async () => {
+  // Wait a tick for start() to begin
+  await new Promise((r) => setTimeout(r, 0));
+  try {
+    const config = loadRelayConfig(PORT);
+    activeRelayId = process.env.RELAY_ID || config.relayId;
+  } catch {
+    // Best effort
+  }
+})();
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`\n[Server] Received ${signal}, shutting down...`);
@@ -290,7 +244,7 @@ async function shutdown(signal: string): Promise<void> {
     await killTunnel(tunnelProc);
     tunnelProc = null;
   }
-  await deregisterFromDirectory();
+  deregisterFromDirectory(activeRelayId);
   server.close(() => {
     console.log('[Server] HTTP server closed');
     process.exit(0);

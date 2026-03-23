@@ -1,8 +1,13 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
-const DATA_DIR = path.resolve(__dirname, '..', 'data');
+const DATA_DIR = path.join(os.homedir(), '.pixel-agents');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+
+// Legacy path for migration
+const OLD_DATA_DIR = path.resolve(__dirname, '..', 'data');
+const OLD_SESSIONS_FILE = path.join(OLD_DATA_DIR, 'sessions.json');
 
 interface SessionRecord {
   relayId: number;
@@ -19,6 +24,17 @@ let nextId = 1;
 
 /** Load existing session map from disk on startup */
 export function loadSessionRegistry(): void {
+  // Migrate from old location if needed
+  try {
+    if (!fs.existsSync(SESSIONS_FILE) && fs.existsSync(OLD_SESSIONS_FILE)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.copyFileSync(OLD_SESSIONS_FILE, SESSIONS_FILE);
+      console.log('[Registry] Migrated sessions file from old location');
+    }
+  } catch (err) {
+    console.warn('[Registry] Migration failed:', err);
+  }
+
   try {
     if (fs.existsSync(SESSIONS_FILE)) {
       const raw = fs.readFileSync(SESSIONS_FILE, 'utf-8');

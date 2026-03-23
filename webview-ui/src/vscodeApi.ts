@@ -4,29 +4,70 @@ declare function acquireVsCodeApi(): { postMessage(msg: unknown): void };
 
 type MessageHandler = (e: MessageEvent) => void;
 
-const WS_URL: string | undefined =
+// ── Directory URL for ?office= resolution ────────────────────────────────────
+
+const DIRECTORY_URL: string =
+  (import.meta.env.VITE_DIRECTORY_URL as string | undefined) ||
+  'https://pixel-agents-directory.workers.dev';
+
+// ── Synchronous WS URL from query string or env ──────────────────────────────
+
+const SYNC_WS_URL: string | undefined =
   (import.meta.env.VITE_WS_URL as string | undefined) ||
   (typeof window !== 'undefined'
     ? (new URLSearchParams(window.location.search).get('ws') ?? undefined)
     : undefined);
 
 /**
- * True when running in browser mode with a WebSocket relay URL configured.
+ * Whether `?office=` was provided in the URL (async resolution needed).
+ */
+export const hasOfficeParam: boolean =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('office');
+
+/**
+ * True when running in browser mode with a WebSocket relay URL configured
+ * (either via ?ws= or ?office=).
  * Used to skip browserMock dispatches when the relay handles bootstrap.
  */
-export const isWsMode = isBrowserRuntime && !!WS_URL;
+export const isWsMode = isBrowserRuntime && (!!SYNC_WS_URL || hasOfficeParam);
 
-// ── WebSocket singleton (browser + VITE_WS_URL only) ─────────────────────────
+/**
+ * Resolve the WebSocket URL, handling ?office=<id> async lookup.
+ *
+ * 1. If `?office=<id>` is present, fetches the directory for the current wsUrl.
+ * 2. Otherwise falls back to `?ws=<url>` or VITE_WS_URL.
+ * Returns `null` if no URL can be determined or the office is offline.
+ */
+export async function resolveWsUrl(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+
+  const params = new URLSearchParams(window.location.search);
+  const officeId = params.get('office');
+
+  if (officeId) {
+    try {
+      const res = await fetch(`${DIRECTORY_URL}/offices/${officeId}`);
+      if (!res.ok) return null;
+      const data = (await res.json()) as { wsUrl?: string };
+      return data.wsUrl ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  return SYNC_WS_URL ?? null;
+}
+
+// ── WebSocket singleton (browser + WS mode only) ─────────────────────────────
 
 let ws: WebSocket | null = null;
 const wsHandlers: Set<MessageHandler> = new Set();
 
-function initWs(): void {
-  if (!WS_URL) return;
-  ws = new WebSocket(WS_URL);
+function initWs(url: string): void {
+  ws = new WebSocket(url);
 
   ws.addEventListener('open', () => {
-    console.log('[WS] Connected to relay:', WS_URL);
+    console.log('[WS] Connected to relay:', url);
     ws!.send(JSON.stringify({ type: 'wsReady' }));
   });
 
@@ -54,9 +95,18 @@ function initWs(): void {
   });
 }
 
-// Eagerly connect if in WS mode
-if (isWsMode) {
-  initWs();
+/**
+ * Initialize the WebSocket connection with a resolved URL.
+ * Called from App.tsx after async resolution completes.
+ */
+export function connectWs(url: string): void {
+  if (ws) return; // Already connected
+  initWs(url);
+}
+
+// Eagerly connect if we have a synchronous WS URL (no ?office= needed)
+if (isBrowserRuntime && SYNC_WS_URL && !hasOfficeParam) {
+  initWs(SYNC_WS_URL);
 }
 
 /**

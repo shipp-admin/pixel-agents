@@ -17,7 +17,7 @@ import { OfficeState } from './office/engine/officeState.js';
 import { isRotatable } from './office/layout/furnitureCatalog.js';
 import { EditTool } from './office/types.js';
 import { isBrowserRuntime } from './runtime.js';
-import { isWsMode, vscode } from './vscodeApi.js';
+import { connectWs, hasOfficeParam, isWsMode, resolveWsUrl, vscode } from './vscodeApi.js';
 
 // Game state lives outside React — updated imperatively by message handlers
 const officeStateRef = { current: null as OfficeState | null };
@@ -123,6 +123,25 @@ function EditActionBar({
 }
 
 function App() {
+  // ── Async ?office= resolution ──────────────────────────────────────────────
+  const [officeOffline, setOfficeOffline] = useState(false);
+
+  useEffect(() => {
+    if (!hasOfficeParam) return;
+    let cancelled = false;
+    void resolveWsUrl().then((url) => {
+      if (cancelled) return;
+      if (url) {
+        connectWs(url);
+      } else {
+        setOfficeOffline(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Browser runtime (dev or static dist): load assets from the Vite dev server.
   // In pure mock mode (no WS), also inject fake agents for demo purposes.
   // In relay (WS) mode, only load assets — the relay provides real agents.
@@ -227,6 +246,57 @@ function App() {
       }
       return false;
     })();
+
+  if (officeOffline) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--pixel-bg)',
+          color: 'var(--pixel-text)',
+          fontFamily: 'inherit',
+        }}
+      >
+        <div
+          style={{
+            background: 'var(--pixel-bg)',
+            border: '2px solid var(--pixel-border)',
+            padding: '24px 32px',
+            maxWidth: 480,
+            boxShadow: 'var(--pixel-shadow)',
+            textAlign: 'center',
+            lineHeight: 1.4,
+          }}
+        >
+          <div style={{ fontSize: '32px', marginBottom: 16, color: 'var(--pixel-accent)' }}>
+            Office Offline
+          </div>
+          <p style={{ fontSize: '22px', color: 'var(--pixel-text)', margin: '0 0 12px 0' }}>
+            This office is currently offline.
+          </p>
+          <p style={{ fontSize: '20px', color: 'var(--pixel-text-dim)', margin: '0 0 16px 0' }}>
+            The relay may not be running &mdash; ask the owner to start it with:
+          </p>
+          <code
+            style={{
+              display: 'block',
+              fontSize: '20px',
+              background: 'var(--pixel-btn-bg)',
+              border: '2px solid var(--pixel-border)',
+              padding: '8px 12px',
+              color: 'var(--pixel-accent)',
+            }}
+          >
+            npx shipp-agent-hq
+          </code>
+        </div>
+      </div>
+    );
+  }
 
   if (!layoutReady) {
     const directoryUrl = import.meta.env.VITE_DIRECTORY_URL as string | undefined;
