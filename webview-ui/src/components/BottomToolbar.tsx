@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { WorkspaceFolder } from '../hooks/useExtensionMessages.js';
+import { isBrowserRuntime } from '../runtime.js';
 import { vscode } from '../vscodeApi.js';
 import { SettingsModal } from './SettingsModal.js';
+import { SetupModal } from './SetupModal.js';
 
 interface BottomToolbarProps {
   isEditMode: boolean;
@@ -58,6 +60,7 @@ export function BottomToolbar({
 }: BottomToolbarProps) {
   const [hovered, setHovered] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSetupOpen, setIsSetupOpen] = useState(false);
   const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false);
   const [hoveredFolder, setHoveredFolder] = useState<number | null>(null);
   const folderPickerRef = useRef<HTMLDivElement>(null);
@@ -193,6 +196,28 @@ export function BottomToolbar({
           onToggleAlwaysShowOverlay={onToggleAlwaysShowOverlay}
         />
       </div>
+      {isBrowserRuntime && (
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setIsSetupOpen((v) => !v)}
+            onMouseEnter={() => setHovered('setup')}
+            onMouseLeave={() => setHovered(null)}
+            style={
+              isSetupOpen
+                ? { ...btnActive }
+                : {
+                    ...btnBase,
+                    background:
+                      hovered === 'setup' ? 'var(--pixel-btn-hover-bg)' : btnBase.background,
+                  }
+            }
+            title="How to connect your agents"
+          >
+            ?
+          </button>
+          <SetupModal isOpen={isSetupOpen} onClose={() => setIsSetupOpen(false)} />
+        </div>
+      )}
     </div>
   );
 }
